@@ -107,20 +107,35 @@ class runner(nn.Module):
             print(f"{'Test':<12}|{len(test_indices):<10}|{test_indices[0]:<12}|{test_indices[-1]:<12}|{sample_test:<10}")
             print(f"{'Validation':<12}|{len(val_indices):<10}|{val_indices[0]:<12}|{val_indices[-1]:<12}|{'-':<10}")
 
-            self.train_indices = np.sort(datas.sample_series_indices(
-                                        len(train_indices), 
-                                        sample_train, 
-                                        time_lag=self.config['params']['time_lag'], 
-                                        train_ahead=self.config['train']['train_ahead'], 
-                                        seed=42))
-            self.test_indices = np.sort(datas.sample_series_indices(
-                                        len(test_indices), 
-                                        sample_test, 
-                                        time_lag=self.config['params']['time_lag'], 
-                                        train_ahead=self.config['train']['train_ahead'], 
-                                        seed=42))
-            self.val_indices = val_indices
+            if not os.path.exists(self.paths_bib.model_dir + 'split_ids.pkl'):
+
+
+                self.train_indices = np.sort(datas.sample_series_indices(
+                                            len(train_indices), 
+                                            sample_train, 
+                                            time_lag=self.config['params']['time_lag'], 
+                                            train_ahead=self.config['train']['train_ahead'], 
+                                            seed=42))
+                self.test_indices = np.sort(datas.sample_series_indices(
+                                            len(test_indices), 
+                                            sample_test, 
+                                            time_lag=self.config['params']['time_lag'], 
+                                            train_ahead=self.config['train']['train_ahead'], 
+                                            seed=42))
+                self.val_indices = val_indices
+
+                # save the train, test, and validation indices
+                with open(self.paths_bib.model_dir + 'split_ids.pkl', 'wb') as f:
+                    pickle.dump({'train_indices': self.train_indices, 'test_indices': self.test_indices, 'val_indices': self.val_indices}, f)
+                print(f"Train, test, and validation indices saved to {self.paths_bib.model_dir + 'split_ids.pkl'}")
  
+            else:
+                with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
+                    indices = pickle.load(f)
+                    self.train_indices = indices['train_indices']
+                    self.test_indices = indices['test_indices']
+                    self.val_indices = indices['val_indices']
+                print(f"Train, test, and validation indices loaded from {self.paths_bib.model_dir + 'split_ids.pkl'}")
 
     def get_model(self):
         """
@@ -165,9 +180,6 @@ class runner(nn.Module):
             checkpoint = torch.load(self.paths_bib.checkpoint_path)
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.train_loader = checkpoint['train_loader']
-            self.test_loader = checkpoint['test_loader']
-            self.criterion = checkpoint['criterion']
             self.epoch = checkpoint['epoch']
             self.losses = checkpoint['losses']
             self.test_losses = checkpoint['test_losses']
@@ -195,10 +207,7 @@ class runner(nn.Module):
         """
         # Load the latent coefficients
         print(f"{'#'*20}\t{'Training model...':<20}\t{'#'*20}")
-        if self.checkpointed:
-            print(f"Checkpointed model loaded. Continuing training from epoch {self.epoch}")
-        else:
-            self.get_train_data()
+        self.get_train_data()
         self.model_fit()
         
 
@@ -260,6 +269,8 @@ class runner(nn.Module):
         print(f"Train loader created with {len(self.train_loader)} batches")
         self.test_loader = datas.make_dataloader(X_test, Y_test, batch_size=self.config['train']['batch_size'], shuffle=False)
         print(f"Test loader created with {len(self.test_loader)} batches")
+
+
     
     
     def model_fit(self):
@@ -350,10 +361,10 @@ class runner(nn.Module):
                         print(f'Best model loaded from epoch {best_epoch}, with test loss: {best_test_loss:.4f}')
                         break
 
-                if epoch % 5 == 0:
+                if (epoch + 1) % 5 == 0:
                     # Save model checkpoint every 5 epochs
-                    # Save model losses, current weights, best weights, and optimizer state
-                    
+                    # Save model losses, current weights, best weights, and optimizer state 
+
                     torch.save({
                         'epoch': epoch,
                         'model_state_dict': self.model.state_dict(),
@@ -361,9 +372,7 @@ class runner(nn.Module):
                         'losses': losses,
                         'test_losses': test_losses,
                         'early_stop_counter': early_stop_counter,
-                        'best_model': best_model,
-                        'train_loader': self.train_loader,
-                        'test_loader': self.test_loader,
+                        'best_model': best_model
                     }, self.paths_bib.checkpoint_path)
                     print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
                     
@@ -378,3 +387,12 @@ class runner(nn.Module):
         # Save the training and test losses
         with open(self.paths_bib.model_dir + 'losses.pkl', 'wb') as f:
             pickle.dump({'train_losses': losses, 'test_losses': test_losses}, f)
+
+
+    def predict(self):
+        """
+        Predict the test set
+        """
+        print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
+        self.model.eval()
+        
