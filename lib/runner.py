@@ -105,7 +105,7 @@ class runner(nn.Module):
             print("-" * 56)
             print(f"{'Train':<12}|{len(train_indices):<10}|{train_indices[0]:<12}|{train_indices[-1]:<12}|{sample_train:<10}")
             print(f"{'Test':<12}|{len(test_indices):<10}|{test_indices[0]:<12}|{test_indices[-1]:<12}|{sample_test:<10}")
-            print(f"{'Validation':<12}|{len(val_indices):<10}|{val_indices[0]:<12}|{val_indices[-1]:<12}{'-':<10}")
+            print(f"{'Validation':<12}|{len(val_indices):<10}|{val_indices[0]:<12}|{val_indices[-1]:<12}|{'-':<10}")
 
             self.train_indices = np.sort(datas.sample_series_indices(
                                         len(train_indices), 
@@ -204,58 +204,62 @@ class runner(nn.Module):
 
     def get_train_data(self):
         """
-        Get training and test data
+        Get training and test data as torch tensors, minimizing memory usage.
         """
         print('Getting training and test data')
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
             dof_u = f['dof_u']
             dof_v = f['dof_v']
 
-            dof_u_train = np.array([dof_u[idx:idx+1,:] for idx in self.train_indices]).squeeze()
-            dof_v_train = np.array([dof_v[idx:idx+1,:] for idx in self.train_indices]).squeeze()
-
-            dof = np.concatenate((dof_u_train, dof_v_train), axis=1)
-
-            dof_mean = np.mean(dof, axis=0)
-            dof_std = np.std(dof, axis=0)
-
             tl = self.config['params']['time_lag']
             ta = self.config['train']['train_ahead']
-
-            # Prepare arrays for X_train and Y_train
             dof_dim = self.config['params']['input_dim']
 
-            X_train = np.empty((len(self.train_indices), tl, dof_dim), dtype=np.float32)
-            Y_train = np.empty((len(self.train_indices), ta, dof_dim), dtype=np.float32)
-            X_test = np.empty((len(self.test_indices), tl, dof_dim), dtype=np.float32)
-            Y_test = np.empty((len(self.test_indices), ta, dof_dim), dtype=np.float32)
-
-            # Fill X_train and Y_train
+            # Compute mean and std using only the training indices, in chunks to save memory
+            dofs = torch.zeros(len(self.train_indices), dof_dim)
             for i, idx in enumerate(self.train_indices):
-                dof = np.concatenate((dof_u[idx:idx+tl+ta], dof_v[idx:idx+tl+ta]), axis=1)
-                dof = datas.normalize_data(dof, mean=dof_mean, std=dof_std)
-                X_train[i] = dof[:tl]
-                Y_train[i] = dof[tl:tl+ta]
+                u = torch.from_numpy(dof_u[idx:idx+1]).float()
+                v = torch.from_numpy(dof_v[idx:idx+1]).float()
+                dofs[i] = torch.cat((u, v), dim=1)
+            dof_mean = torch.mean(dofs, dim=0)
+            dof_std = torch.std(dofs, dim=0)
+
+            # Helper to get normalized dof sequence as torch tensor
+            def get_dof_seq(idx, length):
+                u = torch.from_numpy(dof_u[idx:idx+length]).float()
+                v = torch.from_numpy(dof_v[idx:idx+length]).float()
+                dof = torch.cat((u, v), dim=1)
+                dof = (dof - dof_mean) / dof_std
+                return dof
+
+            # Prepare lists for X/Y, then stack at the end
+            X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
+            for i, idx in enumerate(self.train_indices):
+                dof_seq = get_dof_seq(idx, tl + ta)
+                X_train[i] = dof_seq[:tl]
+                Y_train[i] = dof_seq[tl:tl+ta]
                 if i % 500 == 0:
                     print(f"Got train data {i}/{len(self.train_indices)}")
             print('Got train data')
 
-            # Fill X_test and Y_test
+            X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
             for i, idx in enumerate(self.test_indices):
-                dof = np.concatenate((dof_u[idx:idx+tl+ta], dof_v[idx:idx+tl+ta]), axis=1)
-                dof = datas.normalize_data(dof, mean=dof_mean, std=dof_std)
-                X_test[i] = dof[:tl]
-                Y_test[i] = dof[tl:tl+ta]
+                dof_seq = get_dof_seq(idx, tl + ta)
+                X_test[i] = dof_seq[:tl]
+                Y_test[i] = dof_seq[tl:tl+ta]
                 if i % 100 == 0:
                     print(f"Got test data {i}/{len(self.test_indices)}")
             print('Got test data')
 
-        print(f"X_train shape: {X_train.shape}, Y_train shape: {Y_train.shape}")
-        print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}")
 
-        # convert to torch tensors and data loader
+        print(f"X_train shape: {X_train.shape}, Y_train shape: {Y_train.shape}, dtype: {X_train.dtype}")
+        print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}, dtype: {X_test.dtype}")
+
+        # convert to data loader
         self.train_loader = datas.make_dataloader(X_train, Y_train, batch_size=self.config['train']['batch_size'], shuffle=True)
+        print(f"Train loader created with {len(self.train_loader)} batches")
         self.test_loader = datas.make_dataloader(X_test, Y_test, batch_size=self.config['train']['batch_size'], shuffle=False)
+        print(f"Test loader created with {len(self.test_loader)} batches")
     
     
     def model_fit(self):

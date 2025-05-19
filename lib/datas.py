@@ -78,12 +78,8 @@ def make_dataloader(X, Y, batch_size=32, shuffle=True):
     import torch
     from torch.utils.data import DataLoader, TensorDataset
 
-    # Convert the data to PyTorch tensors
-    X_tensor = torch.tensor(X, dtype=torch.float32)
-    Y_tensor = torch.tensor(Y, dtype=torch.float32)
-
     # Create a TensorDataset
-    dataset = TensorDataset(X_tensor, Y_tensor)
+    dataset = TensorDataset(X, Y)
 
     # Create a DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
