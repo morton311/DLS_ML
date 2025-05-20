@@ -137,6 +137,7 @@ class runner(nn.Module):
                     self.val_indices = indices['val_indices']
                 print(f"Train, test, and validation indices loaded from {self.paths_bib.model_dir + 'split_ids.pkl'}")
 
+
     def get_model(self):
         """
         Load the model
@@ -233,6 +234,12 @@ class runner(nn.Module):
             dof_mean = torch.mean(dofs, dim=0)
             dof_std = torch.std(dofs, dim=0)
 
+            self.dof_mean = dof_mean
+            self.dof_std = dof_std
+
+            with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
+                pickle.dump((dof_mean, dof_std), f)
+
             # Helper to get normalized dof sequence as torch tensor
             def get_dof_seq(idx, length):
                 u = torch.from_numpy(dof_u[idx:idx+length]).float()
@@ -271,8 +278,6 @@ class runner(nn.Module):
         print(f"Test loader created with {len(self.test_loader)} batches")
 
 
-    
-    
     def model_fit(self):
         
         
@@ -379,7 +384,7 @@ class runner(nn.Module):
 
         end_time = time.time()
         print('Time taken for training: ', end_time - start_time)
-        print('Time taken per epoch: ', (end_time - start_time) / epoch)
+        print('Time taken per epoch: ', (end_time - start_time) / (epoch + 1))
 
         # Save the final model after training
         torch.save(self.model.state_dict(), self.paths_bib.model_path)
@@ -389,10 +394,111 @@ class runner(nn.Module):
             pickle.dump({'train_losses': losses, 'test_losses': test_losses}, f)
 
 
-    def predict(self):
+    def eval(self):
+        print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
+        # get initial sequence
+        time_lag = self.config['params']['time_lag']
+        with h5py.File(self.paths_bib.latent_path, 'r') as f:
+            dof_u = f['dof_u'][self.val_indices[0]:self.val_indices[0] + time_lag]
+            dof_v = f['dof_v'][self.val_indices[0]:self.val_indices[0] + time_lag]
+        initial_input = np.concatenate((dof_u, dof_v), axis=1)
+
+        print(f"Initial input shape: {initial_input.shape}")
+
+        # make predictions
+        val_pred = self.predict(initial_input, num_predictions = len(self.val_indices) - time_lag)
+        
+        # split and save predictions
+        pred_dof_u = val_pred[:, :self.config['params']['input_dim'] // 2]
+        pred_dof_v = val_pred[:, self.config['params']['input_dim'] // 2:]
+
+        print('Saving predictions to file')
+        with h5py.File(self.paths_bib.predictions_dir + 'val_pred.h5', 'w') as f:
+            f.create_dataset('dof_u', data=pred_dof_u)
+            f.create_dataset('dof_v', data=pred_dof_v)
+
+        print(f"Predictions saved to {self.paths_bib.predictions_dir + 'val_pred.h5'}")
+
+        # reconstruct the predictions
+        print(f"Reconstructing predictions")
+        self.pred_rec()
+
+
+    def predict(self, initial_input, num_predictions=1):
         """
         Predict the test set
         """
-        print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
-        self.model.eval()
         
+        self.model.eval()
+        """
+        Predict long-term future values using the model.
+
+        Args:
+            model: The trained model.
+            initial_input: The initial input sequence.
+            time_lag: The length of the input sequence.
+            num_predictions: The number of future values to predict.
+
+        Returns:
+            predictions: The predicted future values.
+        """
+        # Normalize the initial input using the mean and std
+        with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'rb') as f:
+            dof_mean, dof_std = pickle.load(f)
+        initial_input = (initial_input - dof_mean) / dof_std
+        
+        time_lag = self.config['params']['time_lag']
+        
+        if initial_input.shape[0] != 1:
+            initial_input = initial_input[np.newaxis, ...]
+        if initial_input.shape[1] != time_lag:
+            print(f"Initial input shape {initial_input.shape[1]} does not match time lag {time_lag}, input will be truncated.")
+            initial_input = initial_input[:, :time_lag, :]
+        current_input = torch.tensor(initial_input, dtype=torch.float32).to(self.device)
+
+        self.model.eval()
+        predictions = []
+
+        start_time = time.time()
+        with torch.no_grad():
+            for _ in range(num_predictions):
+                output = self.model(current_input)
+                # print('Output shape: ', output[np.newaxis,:,:].shape)
+                predictions.append(output.to('cpu').numpy())  # Ensure tensor is moved to CPU before converting to NumPy
+                # Update the input for the next prediction
+                current_input = torch.cat((current_input[:,1:, :], output.unsqueeze(0)), dim=1)
+                # print('Current input shape: ', current_input.shape)
+
+        end_time = time.time()
+        print('Time taken for long-term prediction: ', end_time - start_time)
+        print('Time taken per prediction: ', (end_time - start_time)/num_predictions)
+        predictions = np.array(predictions)  # Convert list to NumPy array
+        print(f"Predictions shape: {predictions.shape}")
+        predictions = np.concatenate((initial_input[0,:,:], predictions.squeeze()), axis=0)  # Concatenate 
+
+        # Denormalize the predictions
+        predictions = (predictions * dof_std) + dof_mean
+
+        return predictions
+        
+
+    def pred_rec(self):
+
+        # loop over all prediction sets in the predictions directory
+        for pred_file in os.listdir(self.paths_bib.predictions_dir):
+            if pred_file.endswith('.h5') and 'rec' not in pred_file:
+                print(f"Loading predictions from {pred_file}")
+                rec_path = os.path.join(self.paths_bib.predictions_dir, 'rec_' + pred_file)
+                with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
+                    pred_dof_u = f['dof_u'][:]
+                    pred_dof_v = f['dof_v'][:]
+
+                # Load the latent config
+                with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+                    latent_config = pickle.load(f)
+                dls.gfem_recon_long(config=latent_config,
+                                    rec_path=rec_path,
+                                    dof_u=pred_dof_u,
+                                    dof_v=pred_dof_v,
+                                    batch_size=1000)
+                    

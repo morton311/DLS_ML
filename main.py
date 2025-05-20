@@ -1,5 +1,5 @@
 # source /home/cmorton/Desktop/beta-Variational-autoencoders-and-transformers-for-reduced-order-modelling-of-fluid-flows/.venv/bin/activate
-# python -u main.py > out.log
+# python -u main.py -c 're15k' -m 'train'
 import argparse
 import os
 import shutil

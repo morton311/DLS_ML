@@ -360,6 +360,7 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
             snap_end = (i + 1) * batch_size
             if snap_end > num_snaps:
                 snap_end = num_snaps
+            batch_size = snap_end - snap_start
             u_mean = f['mean'][:, :, 0]
             v_mean = f['mean'][:, :, 1]
             Q_grid_u = f[field_name][snap_start:snap_end,:,:,0]
