@@ -21,7 +21,6 @@ import lib.transformer as tr
 import lib.datas as datas
 
 
-
 class runner(nn.Module):
     def __init__(self, config):
         """
@@ -52,16 +51,13 @@ class runner(nn.Module):
         print(f"Paths initialized")
         # print directory structure
         if is_init_path:
-            DisplayTree(header=True, ignoreList = ['*.pyc'])
-
+            DisplayTree(header=True, ignoreList = ['*.pyc','*.png'])
 
         # get model info
         self.get_data()
         self.get_model()
         self.compile_model()
         
-
-
 
     def get_data(self):
         """
@@ -178,7 +174,7 @@ class runner(nn.Module):
         model_flag = os.path.exists(self.paths_bib.model_path)
         if check_flag and not model_flag and not self.config['overwrite'] in ['l', 'm']: 
             print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
-            checkpoint = torch.load(self.paths_bib.checkpoint_path)
+            checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epoch']
@@ -195,7 +191,6 @@ class runner(nn.Module):
             print(f"Loading model weights from {self.paths_bib.model_path}")
             self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
             self.checkpointed = False
-            self.config['mode'] = 'eval'
         else:
             print(f"Model does not exist at {self.paths_bib.model_path}. Training from scratch.")
             self.checkpointed = False
@@ -342,7 +337,7 @@ class runner(nn.Module):
                         inputs = torch.cat((inputs[:, 1:, :], outputs.unsqueeze(1)), dim=1)
 
             test_losses.append(test_loss / len(self.test_loader))
-            print(f"Epoch [{epoch+1}/{self.config['train']['num_epochs']}], Train Loss: {losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}")
+            
 
 
             ## ------------------------------- Early stop and Checkpoint -------------------------------
@@ -356,7 +351,7 @@ class runner(nn.Module):
                     best_test_loss = test_loss / len(self.test_loader)
                     best_model = copy.deepcopy(self.model.state_dict())
                     best_epoch = epoch + 1
-                    print(f'Best model saved at epoch {best_epoch} with test loss: {best_test_loss:.4f}')
+                    # print(f'Best model saved at epoch {best_epoch} with test loss: {best_test_loss:.4f}')
                     early_stop_counter = 0
                 else:
                     early_stop_counter += 1
@@ -379,11 +374,14 @@ class runner(nn.Module):
                         'early_stop_counter': early_stop_counter,
                         'best_model': best_model
                     }, self.paths_bib.checkpoint_path)
-                    print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
-                    
+                    # print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
+                
+                best_flag = 'X' if (epoch + 1) == best_epoch else ' '
+                checkpoint_flag = 'X' if (epoch + 1) % 5 == 0 else ' '
+                print(f"| Epoch: {epoch+1:<4}/{self.config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:7.4f} | Test Loss: {test_losses[-1]:7.4f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{self.config['train']['patience']} | Checkpoint: {checkpoint_flag:<1} |")
 
         end_time = time.time()
-        print('Time taken for training: ', end_time - start_time)
+        print('\n\nTime taken for training: ', end_time - start_time)
         print('Time taken per epoch: ', (end_time - start_time) / (epoch + 1))
 
         # Save the final model after training
@@ -393,11 +391,18 @@ class runner(nn.Module):
         with open(self.paths_bib.model_dir + 'losses.pkl', 'wb') as f:
             pickle.dump({'train_losses': losses, 'test_losses': test_losses}, f)
 
+        print(f"Training and test losses saved to {self.paths_bib.model_dir + 'losses.pkl'}")
 
-    def eval(self):
+        print('\nTraining complete')
+
+    def pred(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
         # get initial sequence
         time_lag = self.config['params']['time_lag']
+        if 'pred_lim' in self.config.keys():
+            pred_lim = self.config['pred_lim']
+        else:
+            pred_lim = np.inf
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
             dof_u = f['dof_u'][self.val_indices[0]:self.val_indices[0] + time_lag]
             dof_v = f['dof_v'][self.val_indices[0]:self.val_indices[0] + time_lag]
@@ -405,8 +410,12 @@ class runner(nn.Module):
 
         print(f"Initial input shape: {initial_input.shape}")
 
+        num_predictions = len(self.val_indices) - time_lag
+        if num_predictions > pred_lim:
+            num_predictions = pred_lim
+
         # make predictions
-        val_pred = self.predict(initial_input, num_predictions = len(self.val_indices) - time_lag)
+        val_pred = self.predict(initial_input, num_predictions = num_predictions)
         
         # split and save predictions
         pred_dof_u = val_pred[:, :self.config['params']['input_dim'] // 2]
@@ -445,7 +454,13 @@ class runner(nn.Module):
         # Normalize the initial input using the mean and std
         with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'rb') as f:
             dof_mean, dof_std = pickle.load(f)
+        if dof_mean.dtype == torch.float32:
+            dof_mean = dof_mean.numpy()
+        if dof_std.dtype == torch.float32:
+            dof_std = dof_std.numpy()
+
         initial_input = (initial_input - dof_mean) / dof_std
+        
         
         time_lag = self.config['params']['time_lag']
         
@@ -498,7 +513,95 @@ class runner(nn.Module):
                     latent_config = pickle.load(f)
                 dls.gfem_recon_long(config=latent_config,
                                     rec_path=rec_path,
-                                    dof_u=pred_dof_u,
-                                    dof_v=pred_dof_v,
+                                    dof_u=pred_dof_u.T,
+                                    dof_v=pred_dof_v.T,
                                     batch_size=1000)
-                    
+                
+    def eval(self):
+        """
+        Evaluate the model
+        """
+        import lib.plotting as plots
+        print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
+        
+        # Load the latent config
+        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+            self.l_config = pickle.load(f)
+        nx = self.l_config.nx
+        ny = self.l_config.ny
+        nx_t = self.l_config.nx_t
+        ny_t = self.l_config.ny_t
+
+        # point probe info
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        x = x[:nx_t]
+        y = y[:ny_t]
+        X, Y = np.meshgrid(x, y)
+
+        # find y closest  = 0.112
+        y_closest = np.argmin(np.abs(y - 0.112))
+        # print('y_closest: ', y[y_closest])
+
+        # find x closest to 0.233 and 0.765
+        x_closest1 = np.argmin(np.abs(x - 0.233))
+        x_closest2 = np.argmin(np.abs(x - 0.765))
+        # print('x_closest1: ', x[x_closest1])
+        # print('x_closest2: ', x[x_closest2])
+
+        point_1 = (x[x_closest1], y[y_closest])
+        point_2 = (x[x_closest2], y[y_closest])
+        point_1_idx = (x_closest1, y_closest)
+        point_2_idx = (x_closest2, y_closest)
+
+        # load indices of validation set
+        with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
+            indices = pickle.load(f)
+            self.val_indices = indices['val_indices']
+
+        # Load the predictions
+        for pred_file in os.listdir(self.paths_bib.predictions_dir):
+            if pred_file.endswith('.h5') and 'rec' in pred_file:
+                print(f"Loading predictions from {pred_file}")
+                with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
+                    pred = f['Q_rec'][:]
+                    uv_rec_p1 = pred[:, point_1_idx[0], point_1_idx[1], :]
+                    uv_rec_p2 = pred[:, point_2_idx[0], point_2_idx[1], :]
+                
+                print(f'Loading truth from {self.paths_bib.data_path}')
+                with h5py.File(self.paths_bib.data_path, 'r') as f:
+                    mean = f['mean'][:nx_t, :ny_t]
+                    truth = f['UV'][self.val_indices[:pred.shape[0]], :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+                    mean_uv_p1 = f['mean'][point_1_idx[0], point_1_idx[1], :]
+                    mean_uv_p2 = f['mean'][point_2_idx[0], point_2_idx[1], :]
+                    uv_p1 = f['UV'][self.val_indices[:pred.shape[0]], point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
+                    uv_p2 = f['UV'][self.val_indices[:pred.shape[0]], point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
+
+                print(f"Truth shape: {truth.shape}, Pred shape: {pred.shape}")
+
+                point_dict = {
+                    "truth": {
+                        "p1": uv_p1,
+                        "p2": uv_p2
+                    },
+                    "pred": {
+                        "p1": uv_rec_p1,
+                        "p2": uv_rec_p2
+                    }
+                }
+
+                # plot losses, RMS, TKE, Coherence
+                print(f'Generating plots')
+                plots.plot_loss(self)
+                print('Loss plot done')
+                plots.plot_rms(self, truth=truth, pred=pred)
+                print('RMS plot done')
+                plots.plot_tke(self, truth=truth, pred=pred)
+                print('TKE plot done')
+                plots.plot_PSDs(self, point_dict)
+                print('PSD plot done')
+                plots.plot_coherence(self, point_dict)
+                print('Coherence plot done')
+                plots.plot_points(self)
+                print('Point plot done')
+

@@ -18,14 +18,14 @@
     },
 
     "train": {
-        "train_split":  0.7,
+        "train_split":  0.02915,
         "test_split":   0.1,
-        "sample_train": 6000,
-        "sample_test":  600,
+        "sample_train": 0,
+        "sample_test":  0,
         "lr":           0.001,
         "num_epochs":   1000,
         "patience":     25,
-        "train_ahead":  5,
+        "train_ahead":  1,
         "batch_size":   256
     },
 

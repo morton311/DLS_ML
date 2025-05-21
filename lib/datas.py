@@ -59,7 +59,7 @@ def sample_series_indices(series_length, n_samples, time_lag=64, train_ahead=5, 
     Returns the starting indices of the input sequences.
     """
     import numpy as np
-    if series_length - time_lag - train_ahead < n_samples:
+    if series_length - time_lag - train_ahead < n_samples and n_samples != 0:
         raise ValueError("n_samples must be less than or equal to the length of the series")
 
     rng = np.random.default_rng(seed)

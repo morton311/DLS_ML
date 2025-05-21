@@ -453,8 +453,11 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
         with h5py.File(dof_path, 'r') as f:
             dof_u = f['dof_u'][:].T
             dof_v = f['dof_v'][:].T
-    
-    num_batches = dof_u.shape[1] // batch_size
+            
+    num_snaps = dof_u.shape[1]
+    num_batches = num_snaps // batch_size
+    if num_snaps % batch_size != 0:
+        num_batches += 1
 
 
     IJK = np.array([[0, 1], [1, 1], [1, 0], [0, 0]])
@@ -466,11 +469,14 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
     with h5py.File(rec_path, 'w') as rec_file:
         if 'Q_rec' in rec_file.keys():
             del rec_file['Q_rec']
-        rec_file.create_dataset('Q_rec', (2, config.nx_t, config.ny_t, dof_u.shape[-1]), dtype='float32')
+        rec_file.create_dataset('Q_rec', (dof_u.shape[-1], config.nx_t, config.ny_t, 2), dtype='float32')
 
         for id in tqdm(range(num_batches)):
             snap_start = id * batch_size
             snap_end = (id + 1) * batch_size
+            if snap_end >= num_snaps:
+                snap_end = num_snaps
+            batch_size = snap_end - snap_start
 
             Q_rec_u = np.zeros((config.nx_t, config.ny_t, batch_size))
             Q_rec_v = np.zeros((config.nx_t, config.ny_t, batch_size))
@@ -493,5 +499,8 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
                     Q_rec_u[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_u
                     Q_rec_v[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_v
 
+
             rec_file['Q_rec'][snap_start:snap_end, :, :, 0] = Q_rec_u.transpose(2,0,1)
             rec_file['Q_rec'][snap_start:snap_end, :, :, 1] = Q_rec_v.transpose(2,0,1)
+
+    
