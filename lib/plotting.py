@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 plt.rcParams['text.usetex'] = True
 import pickle
 import os
 import numpy as np
 import h5py
+import torch
 from scipy.signal import welch, correlate, coherence, correlation_lags, csd
 
 paper_width = 470 # pt
@@ -89,9 +91,9 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.fig_dir + 'rms_u_comparison.png', dpi=600)
+    plt.savefig(runner.paths_bib.fig_dir + 'rms_u_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
 
-    fig, axs = plt.subplots(1, 2, figsize=(size*width,size*width/2))
+    fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
     c1 = axs[0].contourf(X, Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     add_colorbar(axs[0], c1, ticks=ticks)
     axs[0].set_title('True V RMS')
@@ -104,7 +106,7 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.fig_dir + 'rms_v_comparison.png', dpi=600)
+    plt.savefig(runner.paths_bib.fig_dir + 'rms_v_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
 
     # RMS error 
     rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
@@ -189,7 +191,7 @@ def plot_PSDs(runner, data_dict):
             psd_results[data_type][point_name] = Pxx
     psd_results['f'] = f_u
     
-    size = 1
+    size = 0.75
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     # Plotting the PSD for U and V component point 1
     axs[0].loglog(psd_results['f'], psd_results['truth']['p1'][0], label='True $u$', color='k', linestyle='-')
@@ -375,8 +377,54 @@ def plot_points(runner):
 
 
 
+def attention_maps(runner):
+    """
+    Plot the attention maps for the predicted data.
+    """
+    time_lag = runner.config['params']['time_lag']
+    # get val_indices
+    val_indices = runner.val_indices[:time_lag]
+    # load dof_u and dof_v
+    with h5py.File(runner.paths_bib.latent_path, 'r') as f:
+        dof_u = f['dof_u'][val_indices]
+        dof_v = f['dof_v'][val_indices]
 
+        initial_input = np.concatenate((dof_u, dof_v), axis=1)
+        with open(os.path.join(runner.paths_bib.model_dir, 'dof_scaler.pkl'), 'rb') as f:
+            dof_mean, dof_std = pickle.load(f)
+        if dof_mean.dtype == torch.float32:
+            dof_mean = dof_mean.numpy()
+        if dof_std.dtype == torch.float32:
+            dof_std = dof_std.numpy()
 
+        initial_input = (initial_input - dof_mean) / dof_std
+
+        # Convert to PyTorch tensor
+        initial_input = torch.tensor(initial_input, dtype=torch.float32).to(runner.device)
+
+        _ = runner.model(initial_input[np.newaxis, ...])
+
+        # Retrieve and visualize attention weights
+        attn_weights = runner.model.get_attn()
+        num_layers = len(attn_weights)
+        num_heads = next(iter(attn_weights.values())).shape[1]  # Get the number of heads from the first layer's weights
+
+        fig, axes = plt.subplots(num_layers, num_heads, figsize=(num_heads * 2, num_layers * 2), sharex=True, sharey=True)  
+        for i, (layer, weights) in enumerate(attn_weights.items()):
+            weights = weights.cpu().numpy()
+            # weights = weights.squeeze(0)  # Remove the batch dimension
+            for j in range(num_heads):
+                ax = axes[i, j] if num_layers > 1 else axes[j]
+                sns.heatmap(weights[-1,j], cmap="viridis", ax=ax, cbar=False)
+                ax.set_title(f"Layer {i+1}, Head {j+1}")
+                if i == num_layers - 1:
+                    ax.set_xlabel("Key Positions")
+                if j == 0:
+                    ax.set_ylabel("Query Positions")
+                    
+
+        plt.tight_layout()
+        plt.savefig(runner.paths_bib.fig_dir + 'attention_weights.png', dpi=600)
 
 
 

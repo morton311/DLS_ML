@@ -292,6 +292,7 @@ class runner(nn.Module):
 
         start_time = time.time()
         
+        max_norm = 2.0
 
         for epoch in range(len(losses), self.config['train']['num_epochs']):
             self.model.train()
@@ -318,6 +319,8 @@ class runner(nn.Module):
                     inputs = torch.cat((inputs[:, 1:, :], outputs.detach().unsqueeze(1)), dim=1)
 
                 epoch_loss += total_loss.item() / targets.shape[1]
+
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
                 self.optimizer.step()
 
             losses.append(epoch_loss / len(self.train_loader))
@@ -604,4 +607,6 @@ class runner(nn.Module):
                 print('Coherence plot done')
                 plots.plot_points(self)
                 print('Point plot done')
+                plots.attention_maps(self)
+                print('Attention map plot done')
 
