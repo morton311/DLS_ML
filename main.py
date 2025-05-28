@@ -12,7 +12,7 @@ from lib.runner import runner
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', type=str, default='config.json', help='Name or whole path of config file, must be in json format')
 parser.add_argument('-o', choices=['l', 'm', 'r', None], default=None, help="Overwrite: 'l' for latent space, 'm' for model, 'r' for results, or None")
-parser.add_argument('-m', choices=['train', 'eval', 'pred'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
+parser.add_argument('-m', choices=['train', 'eval', 'pred', 'test'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
 args = parser.parse_args()
 
 # Check if arg contains directory name and/or .json

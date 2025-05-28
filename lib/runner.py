@@ -23,41 +23,37 @@ import lib.datas as datas
 
 class runner(nn.Module):
     def __init__(self, config):
-        """
-        Initialize the runner 
-        """
         super(runner, self).__init__()
         self.config = config
         self.device = config['device']
-        
-        is_init_path, self.paths_bib = init.init_path(config)
+        self.paths_bib = self._init_paths_and_logging(config)
 
-        # set output and error streams to a log file
-        sys.stdout = open(self.paths_bib.log_path, 'w')
-        sys.stderr = open(self.paths_bib.log_path, 'a')
-        print(f'Using device: {self.device}')
-
-        # Print the keys and nested keys in the config file
-        print(f"{'#'*20}\t{'Configuration':<20}\t{'#'*20}")
-        for key, value in config.items():
-            if isinstance(value, dict):
-                print(f"{key}")
-                for sub_key, sub_value in value.items():
-                    print(f"  {sub_key}: {sub_value}")
-            else:
-                print(f"{key}: {value}")
-        print(f"{'#'*20}\t{'Pathing initialization':<20}\t{'#'*20}")
-        
-        print(f"Paths initialized")
-        # print directory structure
-        if is_init_path:
-            DisplayTree(header=True, ignoreList = ['*.pyc','*.png'])
+        self._log_config()
 
         # get model info
         self.get_data()
         self.get_model()
         self.compile_model()
-        
+    
+    def _init_paths_and_logging(self, config):
+        is_init_path, paths = init.init_path(config)
+        sys.stdout = open(paths.log_path, 'w')
+        sys.stderr = open(paths.log_path, 'a')
+
+        print(f'Using device: {self.device}')
+        if is_init_path:
+            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'])
+        return paths
+
+    def _log_config(self):
+        print(f"{'#'*20} Configuration {'#'*20}")
+        for key, val in self.config.items():
+            if isinstance(val, dict):
+                print(f"{key}:")
+                for sub_key, sub_val in val.items():
+                    print(f"  {sub_key}: {sub_val}")
+            else:
+                print(f"{key}: {val}")
 
     def get_data(self):
         """
@@ -66,73 +62,84 @@ class runner(nn.Module):
         print(f"{'#'*20}\t{'Loading data...':<20}\t{'#'*20}")
         
         if not os.path.exists(self.paths_bib.latent_path) or self.config['overwrite'] == 'l':
-            # computing the latent coefficients
-            print(f"\nCoefficients not found. Computing latent coefficients")
-            with h5py.File(self.paths_bib.data_path, 'r') as f:
-                num_snaps = f['UV'].shape[0]
-            latent_config = dls.gfem_2d_long(data_path = self.paths_bib.data_path, 
-                                            field_name = 'UV',
-                                            latent_file = self.paths_bib.latent_path, 
-                                            patch_size = self.config['latent_params']['patch_size'],
-                                            num_modes = self.config['latent_params']['num_modes'],
-                                            batch_size = num_snaps // 20)
-            # save latent config
-            with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
-                pickle.dump(latent_config, f)
-            print(f"Latent coefficient config saved")
+            self._compute_latent_coefficients()
+        self._latent_split()
 
+
+    def _compute_latent_coefficients(self):
+        print("Computing latent coefficients...")
+        with h5py.File(self.paths_bib.data_path, 'r') as f:
+            num_snaps = f['UV'].shape[0]
+
+        latent_config = dls.gfem_2d_long(
+            data_path=self.paths_bib.data_path,
+            field_name='UV',
+            latent_file=self.paths_bib.latent_path,
+            patch_size=self.config['latent_params']['patch_size'],
+            num_modes=self.config['latent_params']['num_modes'],
+            batch_size=num_snaps // 20
+        )
+
+        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
+            pickle.dump(latent_config, f)
+        print("Latent coefficient config saved")
+
+    def _latent_split(self):
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            # Define the model input dimension, = total dofs
-            self.config['params']['input_dim'] = 2 * f['dof_u'].shape[1]
-
+            input_dim = 2 * f['dof_u'].shape[1]
+            self.config['params']['input_dim'] = input_dim
             total_snaps = f['dof_u'].shape[0]
-            print(f"Total snaps: {total_snaps}")
 
-            # find indices for train, test, and validation sets
-            train_indices = np.arange(0, int(total_snaps * self.config['train']['train_split']))
-            test_indices = np.arange(len(train_indices), len(train_indices) + int(len(train_indices) *self.config['train']['test_split']))
-            val_indices = np.arange(len(train_indices) + len(test_indices), total_snaps)
-            
-            # Print a table with the set info
-            sample_train = self.config['train']['sample_train']
-            sample_test = self.config['train']['sample_test']
+        self._split_indices(total_snaps)
 
-            print(f"{'Set':<12}|{'Total':<10}|{'First Idx':<12}|{'Last Idx':<12}|{'Sampled':<10}")
-            print("-" * 56)
-            print(f"{'Train':<12}|{len(train_indices):<10}|{train_indices[0]:<12}|{train_indices[-1]:<12}|{sample_train:<10}")
-            print(f"{'Test':<12}|{len(test_indices):<10}|{test_indices[0]:<12}|{test_indices[-1]:<12}|{sample_test:<10}")
-            print(f"{'Validation':<12}|{len(val_indices):<10}|{val_indices[0]:<12}|{val_indices[-1]:<12}|{'-':<10}")
+    def _split_indices(self, total_snaps):
+        # find indices for train, test, and validation sets
+        train_len = int(total_snaps * self.config['train']['train_split'])
+        test_len = int(train_len * self.config['train']['test_split'])
+        
+        train_indices = np.arange(0, train_len)
+        test_indices = np.arange(train_len, train_len + test_len)
+        val_indices = np.arange(train_len + test_len, total_snaps)
+        
+        # Print a table with the set info
+        sample_train = self.config['train']['sample_train']
+        sample_test = self.config['train']['sample_test']
 
-            if not os.path.exists(self.paths_bib.model_dir + 'split_ids.pkl'):
+        print(f"{'Set':<12}|{'Total':<10}|{'First Idx':<12}|{'Last Idx':<12}|{'Sampled':<10}")
+        print("-" * 56)
+        print(f"{'Train':<12}|{train_len:<10}|{train_indices[0]:<12}|{train_indices[-1]:<12}|{sample_train:<10}")
+        print(f"{'Test':<12}|{len(test_indices):<10}|{test_indices[0]:<12}|{test_indices[-1]:<12}|{sample_test:<10}")
+        print(f"{'Validation':<12}|{len(val_indices):<10}|{val_indices[0]:<12}|{val_indices[-1]:<12}|{'-':<10}")
+
+        if not os.path.exists(self.paths_bib.model_dir + 'split_ids.pkl'):
 
 
-                self.train_indices = np.sort(datas.sample_series_indices(
-                                            len(train_indices), 
-                                            sample_train, 
-                                            time_lag=self.config['params']['time_lag'], 
-                                            train_ahead=self.config['train']['train_ahead'], 
-                                            seed=42))
-                self.test_indices = np.sort(datas.sample_series_indices(
-                                            len(test_indices), 
-                                            sample_test, 
-                                            time_lag=self.config['params']['time_lag'], 
-                                            train_ahead=self.config['train']['train_ahead'], 
-                                            seed=42))
-                self.val_indices = val_indices
+            self.train_indices = np.sort(datas.sample_series_indices(
+                                        train_len, 
+                                        sample_train, 
+                                        time_lag=self.config['params']['time_lag'], 
+                                        train_ahead=self.config['train']['train_ahead'], 
+                                        seed=42))
+            self.test_indices = np.sort(datas.sample_series_indices(
+                                        len(test_indices), 
+                                        sample_test, 
+                                        time_lag=self.config['params']['time_lag'], 
+                                        train_ahead=self.config['train']['train_ahead'], 
+                                        seed=42))
+            self.val_indices = val_indices
 
-                # save the train, test, and validation indices
-                with open(self.paths_bib.model_dir + 'split_ids.pkl', 'wb') as f:
-                    pickle.dump({'train_indices': self.train_indices, 'test_indices': self.test_indices, 'val_indices': self.val_indices}, f)
-                print(f"Train, test, and validation indices saved to {self.paths_bib.model_dir + 'split_ids.pkl'}")
- 
-            else:
-                with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
-                    indices = pickle.load(f)
-                    self.train_indices = indices['train_indices']
-                    self.test_indices = indices['test_indices']
-                    self.val_indices = indices['val_indices']
-                print(f"Train, test, and validation indices loaded from {self.paths_bib.model_dir + 'split_ids.pkl'}")
+            # save the train, test, and validation indices
+            with open(self.paths_bib.model_dir + 'split_ids.pkl', 'wb') as f:
+                pickle.dump({'train_indices': self.train_indices, 'test_indices': self.test_indices, 'val_indices': self.val_indices}, f)
+            print(f"Train, test, and validation indices saved to {self.paths_bib.model_dir + 'split_ids.pkl'}")
 
+        else:
+            with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
+                indices = pickle.load(f)
+                self.train_indices = indices['train_indices']
+                self.test_indices = indices['test_indices']
+                self.val_indices = indices['val_indices']
+            print(f"Train, test, and validation indices loaded from {self.paths_bib.model_dir + 'split_ids.pkl'}")
 
     def get_model(self):
         """
@@ -150,9 +157,7 @@ class runner(nn.Module):
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
-            print(f"Loading model weights from {self.paths_bib.model_path}")
             self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
-
         print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
 
@@ -275,7 +280,6 @@ class runner(nn.Module):
 
     def model_fit(self):
         
-        
         if self.checkpointed:
             best_epoch = self.epoch
             losses = self.losses
@@ -292,13 +296,13 @@ class runner(nn.Module):
 
         start_time = time.time()
         
-        max_norm = 2.0
+        max_norm = 0.2
 
         for epoch in range(len(losses), self.config['train']['num_epochs']):
             self.model.train()
             epoch_loss = 0
 
-                    ## --------------------------------------- Train ---------------------------------------
+            ## --------------------------------------- Train ---------------------------------------
             for inputs, targets in self.train_loader: 
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 self.optimizer.zero_grad()
