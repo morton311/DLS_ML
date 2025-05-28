@@ -31,10 +31,11 @@ class runner(nn.Module):
         self._log_config()
 
         # get model info
-        self.get_data()
-        self.get_model()
-        self.compile_model()
+        self._get_data()
+        self._get_model()
+        self._compile_model()
     
+
     def _init_paths_and_logging(self, config):
         is_init_path, paths = init.init_path(config)
         sys.stdout = open(paths.log_path, 'w')
@@ -42,8 +43,9 @@ class runner(nn.Module):
 
         print(f'Using device: {self.device}')
         if is_init_path:
-            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'])
+            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=5)
         return paths
+
 
     def _log_config(self):
         print(f"{'#'*20} Configuration {'#'*20}")
@@ -55,7 +57,8 @@ class runner(nn.Module):
             else:
                 print(f"{key}: {val}")
 
-    def get_data(self):
+
+    def _get_data(self):
         """
         Load the latent coefficients
         """
@@ -84,6 +87,7 @@ class runner(nn.Module):
             pickle.dump(latent_config, f)
         print("Latent coefficient config saved")
 
+
     def _latent_split(self):
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
             input_dim = 2 * f['dof_u'].shape[1]
@@ -91,6 +95,7 @@ class runner(nn.Module):
             total_snaps = f['dof_u'].shape[0]
 
         self._split_indices(total_snaps)
+
 
     def _split_indices(self, total_snaps):
         # find indices for train, test, and validation sets
@@ -141,7 +146,8 @@ class runner(nn.Module):
                 self.val_indices = indices['val_indices']
             print(f"Train, test, and validation indices loaded from {self.paths_bib.model_dir + 'split_ids.pkl'}")
 
-    def get_model(self):
+
+    def _get_model(self):
         """
         Load the model
         """
@@ -161,7 +167,7 @@ class runner(nn.Module):
         print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
 
-    def compile_model(self):
+    def _compile_model(self):
         """
         Compile the model
         """
@@ -208,11 +214,11 @@ class runner(nn.Module):
         """
         # Load the latent coefficients
         print(f"{'#'*20}\t{'Training model...':<20}\t{'#'*20}")
-        self.get_train_data()
-        self.model_fit()
+        self._get_train_data()
+        self._model_fit()
         
 
-    def get_train_data(self):
+    def _get_train_data(self):
         """
         Get training and test data as torch tensors, minimizing memory usage.
         """
@@ -278,7 +284,7 @@ class runner(nn.Module):
         print(f"Test loader created with {len(self.test_loader)} batches")
 
 
-    def model_fit(self):
+    def _model_fit(self):
         
         if self.checkpointed:
             best_epoch = self.epoch
@@ -345,8 +351,6 @@ class runner(nn.Module):
 
             test_losses.append(test_loss / len(self.test_loader))
             
-
-
             ## ------------------------------- Early stop and Checkpoint -------------------------------
             # Early stopping and saving the best model
             if epoch > 0:
@@ -402,6 +406,7 @@ class runner(nn.Module):
 
         print('\nTraining complete')
 
+
     def pred(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
         # get initial sequence
@@ -422,7 +427,7 @@ class runner(nn.Module):
             num_predictions = pred_lim
 
         # make predictions
-        val_pred = self.predict(initial_input, num_predictions = num_predictions)
+        val_pred = self._predict(initial_input, num_predictions = num_predictions)
         
         # split and save predictions
         pred_dof_u = val_pred[:, :self.config['params']['input_dim'] // 2]
@@ -437,10 +442,10 @@ class runner(nn.Module):
 
         # reconstruct the predictions
         print(f"Reconstructing predictions")
-        self.pred_rec()
+        self._pred_rec()
 
 
-    def predict(self, initial_input, num_predictions=1):
+    def _predict(self, initial_input, num_predictions=1):
         """
         Predict the test set
         """
@@ -504,7 +509,7 @@ class runner(nn.Module):
         return predictions
         
 
-    def pred_rec(self):
+    def _pred_rec(self):
 
         # loop over all prediction sets in the predictions directory
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
@@ -523,6 +528,7 @@ class runner(nn.Module):
                                     dof_u=pred_dof_u.T,
                                     dof_v=pred_dof_v.T,
                                     batch_size=1000)
+                
                 
     def eval(self):
         """

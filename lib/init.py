@@ -29,7 +29,7 @@ class pathsBib:
         self.model_id = self.model_id.replace('.', '_')
 
         self.model_dir = self.latent_dir + self.model_id + '/'
-        self.log_path = self.model_dir + 'out.log'
+        self.log_path = self.model_dir + config['mode'] + '.log'
         self.model_path = self.model_dir + 'model.pth'
         self.checkpoint_dir = self.model_dir + 'checkpoints/'
         self.checkpoint_path = self.checkpoint_dir + 'checkpoint.tar'

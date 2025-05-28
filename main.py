@@ -47,7 +47,6 @@ if __name__ == "__main__":
     elif run.config['mode'] == 'eval':
         run.eval()
     
-
     # copy the config file to the model directory
     shutil.copy(args.c, run.paths_bib.model_dir + os.path.basename(args.c))
     
