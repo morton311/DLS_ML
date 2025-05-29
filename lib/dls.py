@@ -96,9 +96,9 @@ def gfem_recon(dof_u, dof_v, config):
 
                 Q_rec_u[config.sample_x[i]:config.sample_x[i+1]+1, config.sample_y[j]:config.sample_y[j+1]+1, id] = Q_rec_local_u
                 Q_rec_v[config.sample_x[i]:config.sample_x[i+1]+1, config.sample_y[j]:config.sample_y[j+1]+1, id] = Q_rec_local_v
-    Q_rec = np.zeros((2, config.nx_t, config.ny_t, dof_u.shape[-1]))
-    Q_rec[0, :, :, :] = Q_rec_u
-    Q_rec[1, :, :, :] = Q_rec_v
+    Q_rec = np.zeros((dof_u.shape[-1], config.nx_t, config.ny_t, 2))
+    Q_rec[:, :, :, 0] = Q_rec_u.transpose(2,0,1)
+    Q_rec[:, :, :, 1] = Q_rec_v.transpose(2,0,1)
     return Q_rec
 
 class dls_Config:
@@ -502,5 +502,97 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
 
             rec_file['Q_rec'][snap_start:snap_end, :, :, 0] = Q_rec_u.transpose(2,0,1)
             rec_file['Q_rec'][snap_start:snap_end, :, :, 1] = Q_rec_v.transpose(2,0,1)
+
+def latent_eval(runner):
+    print(f"{'#'*20}\t{'Evaluating latent...':<20}\t{'#'*20}")
+    import math
+    from lib.plotting import l2_err_norm, curl
+    # pull the latent space from h5 file
+    eval_length_max = 2499
+    with h5py.File(runner.paths_bib.latent_path, 'r') as f:
+        latent_length = f['dof_u'].shape[0]
+        if latent_length > eval_length_max:
+            latent_length = eval_length_max
+        dof_u = f['dof_u'][:latent_length].T
+        dof_v = f['dof_v'][:latent_length].T
+
+    # reconstruct the data using the gfem_recon function
+    print('Reconstructing data...')
+    Q_rec = gfem_recon(dof_u=dof_u, dof_v=dof_v, config=runner.l_config)
+    print('Data reconstructed.')
+
+    nx = runner.l_config.nx
+    ny = runner.l_config.ny
+    nx_t = runner.l_config.nx_t
+    ny_t = runner.l_config.ny_t
+
+    # point probe info
+    x = np.linspace(0, 1, nx)
+    y = np.linspace(0, 1, ny)
+    x = x[:nx_t]
+    y = y[:ny_t]
+
+    # load the ground truth data
+    with h5py.File(runner.paths_bib.data_path, 'r') as f:
+        mean = f['mean'][:nx_t, :ny_t, :]
+        Q = f['UV'][:latent_length] - mean[np.newaxis, ...]
+
+    # calculate the compression ratio
+    M = math.prod(Q.shape) 
+    T = latent_length
+    n = runner.l_config.num_gfem_nodes
+    m = runner.l_config.num_modes
+    d = 2
+    p = runner.l_config.patch_size
+    CR = M * T / ( d * T * n * (m+1) + d * m * p**2)
+
+    print(f'Compression Ratio: {CR}')
+
+    # reconstruction error
+    L2_error = l2_err_norm(true=Q, pred=Q_rec, axis=(1, 2, 3))
+    L2_error_mean = L2_error.mean()
+
+    print(f'L2 Error Mean: {100*L2_error_mean:.4f}%')
+
+    # vorticity reconstruction error
+    vort = curl(x,y, Q[..., 0].transpose(1,2,0), Q[..., 1].transpose(1,2,0))
+    vort = vort.transpose(2,0,1)
+    vort_rec = curl(x,y, Q_rec[..., 0].transpose(1,2,0), Q_rec[..., 1].transpose(1,2,0))
+    vort_rec = vort_rec.transpose(2,0,1)
+
+    vort_error = l2_err_norm(true=vort, pred=vort_rec, axis=(1, 2))
+    vort_error_mean = vort_error.mean()
+
+    print(f'Vorticity Error Mean: {100*vort_error_mean:.4f}%')
+
+    # tke reconstruction error
+    tke = 0.5 * np.sum(Q**2, axis=(1,2,3))
+    tke_rec = 0.5 * np.sum(Q_rec**2, axis=(1,2,3))
+
+    tke_error = l2_err_norm(true=tke, pred=tke_rec)
+
+    print(f'TKE Error: {tke_error:.4f}')
+
+    print('Saving error metrics to latent_path...')
+
+    # save error metrics to latent_path h5
+    with h5py.File(runner.paths_bib.latent_path, 'a') as f:
+        if 'CR' not in f.keys():
+            f.create_dataset('CR', data=CR)
+        if 'L2_error' not in f.keys():
+            f.create_dataset('L2_error', data=L2_error)
+        if 'L2_error_mean' not in f.keys():
+            f.create_dataset('L2_error_mean', data=L2_error_mean)
+        if 'vort_error' not in f.keys():
+            f.create_dataset('vort_error', data=vort_error)
+        if 'vort_error_mean' not in f.keys():
+            f.create_dataset('vort_error_mean', data=vort_error_mean)
+        if 'tke_error' not in f.keys():
+            f.create_dataset('tke_error', data=tke_error)
+
+    
+    
+    
+    
 
     

@@ -91,7 +91,7 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.fig_dir + 'rms_u_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'rms_u_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
     c1 = axs[0].contourf(X, Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
@@ -106,7 +106,7 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.fig_dir + 'rms_v_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'rms_v_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
 
     # RMS error 
     rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
@@ -119,8 +119,8 @@ def plot_rms(runner, truth, pred):
     rms_error_v = l2_err_norm(true=rms_true[1], pred=rms_pred[1])
     print(f"RMS error on v: {100*rms_error_v:.3f}%")
         
-    # save metrics to paths_bib.metrics_dir
-    with h5py.File(runner.paths_bib.metrics_dir + 'rms.h5', 'w') as f:
+    # save metrics to paths_bib.pred_metrics_dir
+    with h5py.File(runner.paths_bib.pred_metrics_dir + 'rms.h5', 'w') as f:
         f.create_dataset('rms_true', data=rms_true)
         f.create_dataset('rms_pred', data=rms_pred)
         f.create_dataset('error', data=rms_error)
@@ -146,7 +146,7 @@ def plot_tke(runner, truth, pred):
     plt.legend()
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
-    plt.savefig(runner.paths_bib.fig_dir + 'tke_comparison.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'tke_comparison.png', dpi=600)
 
     # compute L2 error
     tke_error = l2_err_norm(true=tke_true, pred=tke_pred)
@@ -164,10 +164,10 @@ def plot_tke(runner, truth, pred):
     plt.legend()
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
-    plt.savefig(runner.paths_bib.fig_dir + 'tke_psd_comparison.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'tke_psd_comparison.png', dpi=600)
 
-    # save metrics to paths_bib.metrics_dir
-    with h5py.File(runner.paths_bib.metrics_dir + 'tke.h5', 'w') as f:
+    # save metrics to paths_bib.pred_metrics_dir
+    with h5py.File(runner.paths_bib.pred_metrics_dir + 'tke.h5', 'w') as f:
         f.create_dataset('tke_true', data=tke_true)
         f.create_dataset('tke_pred', data=tke_pred)
         f.create_dataset('error', data=tke_error)
@@ -209,7 +209,7 @@ def plot_PSDs(runner, data_dict):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     fig.tight_layout()
-    plt.savefig(runner.paths_bib.fig_dir + 'psd_comparison_p1.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'psd_comparison_p1.png', dpi=600)
 
     # Plotting the PSD for U and V component point 2
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
@@ -228,7 +228,7 @@ def plot_PSDs(runner, data_dict):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     fig.tight_layout()
-    plt.savefig(runner.paths_bib.fig_dir + 'psd_comparison_p2.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'psd_comparison_p2.png', dpi=600)
 
 def plot_autocorr(self, data_dict):
     """
@@ -274,7 +274,7 @@ def plot_autocorr(self, data_dict):
     axs[0,0].set_ylabel('Autocorrelation')
     axs[1,0].set_ylabel('Autocorrelation')
     fig.tight_layout()
-    plt.savefig(self.paths_bib.fig_dir + 'autocorr_comparison.png', dpi=600)
+    plt.savefig(self.paths_bib.pred_fig_dir + 'autocorr_comparison.png', dpi=600)
 
 
 
@@ -304,7 +304,7 @@ def plot_coherence(runner, data_dict):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     
     fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(runner.paths_bib.fig_dir + 'coherence_comparison_p1.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'coherence_comparison_p1.png', dpi=600)
 
     # Compute Coherence for U and V component point 2
     f_u, Cxy_u = coher(data_dict['truth']['p2'][:,0], data_dict['pred']['p2'][:,0])
@@ -324,7 +324,7 @@ def plot_coherence(runner, data_dict):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
 
     fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(runner.paths_bib.fig_dir + 'coherence_comparison_p2.png', dpi=600)
+    plt.savefig(runner.paths_bib.pred_fig_dir + 'coherence_comparison_p2.png', dpi=600)
 
 def plot_points(runner):
     nx = runner.l_config.nx

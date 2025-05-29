@@ -27,5 +27,16 @@
         "patience":     25,
         "train_ahead":  1,
         "batch_size":   256
+    },
+
+    "predictions": {
+        "validation": {
+            "init":     "val",
+            "lim":      null
+        },
+        "seen": {
+            "init":     "train",
+            "lim":      null
+        }
     }
 }

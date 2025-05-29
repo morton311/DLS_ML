@@ -68,6 +68,10 @@ class runner(nn.Module):
             self._compute_latent_coefficients()
         self._latent_split()
 
+        # load latent_config 
+        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+            self.l_config = pickle.load(f)
+
 
     def _compute_latent_coefficients(self):
         print("Computing latent coefficients...")
@@ -407,7 +411,7 @@ class runner(nn.Module):
         print('\nTraining complete')
 
 
-    def pred(self):
+    def pred_old(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
         # get initial sequence
         time_lag = self.config['params']['time_lag']
@@ -439,6 +443,54 @@ class runner(nn.Module):
             f.create_dataset('dof_v', data=pred_dof_v)
 
         print(f"Predictions saved to {self.paths_bib.predictions_dir + 'val_pred.h5'}")
+
+        # reconstruct the predictions
+        print(f"Reconstructing predictions")
+        self._pred_rec()
+
+    def pred(self):
+        print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
+
+        time_lag = self.config['params']['time_lag']
+        with h5py.File(self.paths_bib.latent_path, 'r') as f:
+            num_snaps = f['dof_u'].shape[0]
+
+        for pred_name in self.config['predictions'].keys():
+            print(f"Predicting for {pred_name}")
+
+            pred_lim = self.config['predictions'][pred_name].get('lim', None)
+            if pred_lim is None:
+                pred_lim = np.inf
+
+            if self.config['predictions'][pred_name]['init'] == 'val':
+                idx = np.arange(self.val_indices[0], self.val_indices[0] + time_lag)
+                num_predictions = min(pred_lim, len(self.val_indices) - time_lag)
+
+            elif self.config['predictions'][pred_name]['init'] == 'train':
+                idx = np.arange(0, time_lag)
+                num_predictions = min(pred_lim, num_snaps - time_lag)
+
+            # get initial sequence
+            with h5py.File(self.paths_bib.latent_path, 'r') as f:
+                dof_u = f['dof_u'][idx]
+                dof_v = f['dof_v'][idx]
+            initial_input = np.concatenate((dof_u, dof_v), axis=1)
+            print(f"Initial input shape: {initial_input.shape}")
+
+            # make predictions
+            pred = self._predict(initial_input, num_predictions=num_predictions)
+        
+            # split and save predictions
+            pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
+            pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
+
+            print('Saving predictions to file')
+            with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                f.create_dataset('dof_u', data=pred_dof_u)
+                f.create_dataset('dof_v', data=pred_dof_v)
+                f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
+
+            print(f"Prediction saved to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
 
         # reconstruct the predictions
         print(f"Reconstructing predictions")
@@ -516,7 +568,8 @@ class runner(nn.Module):
             if pred_file.endswith('.h5') and 'rec' not in pred_file:
                 print(f"Loading predictions from {pred_file}")
                 rec_path = os.path.join(self.paths_bib.predictions_dir, 'rec_' + pred_file)
-                with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
+                pred_path = os.path.join(self.paths_bib.predictions_dir, pred_file)
+                with h5py.File(pred_path, 'r') as f:
                     pred_dof_u = f['dof_u'][:]
                     pred_dof_v = f['dof_v'][:]
 
@@ -528,8 +581,13 @@ class runner(nn.Module):
                                     dof_u=pred_dof_u.T,
                                     dof_v=pred_dof_v.T,
                                     batch_size=1000)
+                # copy idx field from original file to rec file
+                with h5py.File(pred_path, 'r') as f:
+                    idx = f['idx'][:]
+                with h5py.File(rec_path, 'w') as f:
+                    f.create_dataset('idx', data=idx)
                 
-                
+
     def eval(self):
         """
         Evaluate the model
@@ -537,9 +595,6 @@ class runner(nn.Module):
         import lib.plotting as plots
         print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
         
-        # Load the latent config
-        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
-            self.l_config = pickle.load(f)
         nx = self.l_config.nx
         ny = self.l_config.ny
         nx_t = self.l_config.nx_t
@@ -568,27 +623,35 @@ class runner(nn.Module):
         point_2_idx = (x_closest2, y_closest)
 
         # load indices of validation set
-        with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
-            indices = pickle.load(f)
-            self.val_indices = indices['val_indices']
+        # with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
+        #     indices = pickle.load(f)
+        #     self.val_indices = indices['val_indices']
 
         # Load the predictions
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
             if pred_file.endswith('.h5') and 'rec' in pred_file:
                 print(f"Loading predictions from {pred_file}")
+                pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
+                self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.figures_dir, pred_name)
+                self.paths_bib.pred_metrics_dir = os.path.join(self.paths_bib.metrics_dir, pred_name)
+                
+                os.makedirs(self.paths_bib.pred_fig_dir, exist_ok=True)
+                os.makedirs(self.paths_bib.pred_metrics_dir, exist_ok=True)
+
                 with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
                     pred = f['Q_rec'][:]
                     uv_rec_p1 = pred[:, point_1_idx[0], point_1_idx[1], :]
                     uv_rec_p2 = pred[:, point_2_idx[0], point_2_idx[1], :]
+                    idx = f['idx'][:]
                 
                 print(f'Loading truth from {self.paths_bib.data_path}')
                 with h5py.File(self.paths_bib.data_path, 'r') as f:
                     mean = f['mean'][:nx_t, :ny_t]
-                    truth = f['UV'][self.val_indices[:pred.shape[0]], :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+                    truth = f['UV'][idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
                     mean_uv_p1 = f['mean'][point_1_idx[0], point_1_idx[1], :]
                     mean_uv_p2 = f['mean'][point_2_idx[0], point_2_idx[1], :]
-                    uv_p1 = f['UV'][self.val_indices[:pred.shape[0]], point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
-                    uv_p2 = f['UV'][self.val_indices[:pred.shape[0]], point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
+                    uv_p1 = f['UV'][idx, point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
+                    uv_p2 = f['UV'][idx, point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
 
                 print(f"Truth shape: {truth.shape}, Pred shape: {pred.shape}")
 

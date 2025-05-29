@@ -1,5 +1,5 @@
 # source /home/cmorton/Desktop/beta-Variational-autoencoders-and-transformers-for-reduced-order-modelling-of-fluid-flows/.venv/bin/activate
-# python -u main.py -c 're15k' -m 'eval'
+# python -u main.py -c 're15k' -m 'pred'
 import argparse
 import os
 import shutil
@@ -12,7 +12,7 @@ from lib.runner import runner
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', type=str, default='config.json', help='Name or whole path of config file, must be in json format')
 parser.add_argument('-o', choices=['l', 'm', 'r', None], default=None, help="Overwrite: 'l' for latent space, 'm' for model, 'r' for results, or None")
-parser.add_argument('-m', choices=['train', 'eval', 'pred', 'test'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
+parser.add_argument('-m', choices=['train', 'eval', 'pred', 'test','latent'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
 args = parser.parse_args()
 
 # Check if arg contains directory name and/or .json
@@ -46,6 +46,9 @@ if __name__ == "__main__":
         run.pred()
     elif run.config['mode'] == 'eval':
         run.eval()
+    elif run.config['mode'] == 'latent':
+        from lib.dls import latent_eval
+        latent_eval(run)
     
     # copy the config file to the model directory
     shutil.copy(args.c, run.paths_bib.model_dir + os.path.basename(args.c))
