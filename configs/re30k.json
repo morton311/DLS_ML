@@ -38,11 +38,11 @@
         },
         "validation": {
             "init":     "val",
-            "lim":      null
+            "lim":      20000
         },
         "seen": {
             "init":     "train",
-            "lim":      null
+            "lim":      20000
         }
     }
 }

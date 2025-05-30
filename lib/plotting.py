@@ -7,6 +7,7 @@ import numpy as np
 import h5py
 import torch
 from scipy.signal import welch, correlate, coherence, correlation_lags, csd
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 paper_width = 470 # pt
 width = paper_width / 72.27 # inches
@@ -33,19 +34,26 @@ def plot_loss(runner):
     plt.plot(results['train_losses'], label='Training Loss', color='k', linestyle='-')
     plt.plot(results['test_losses'], label='Test Loss', color='r', linestyle='-.')
     plt.yscale('log')
-    plt.title('Losses During Training')
+    plt.title('Losses During Training', pad=16)
+    plt.legend(
+        loc='lower right',
+        bbox_to_anchor=(1.025, 0.95),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.legend()
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
     plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=600)
+    plt.close()
 
 def plot_rms(runner, truth, pred):
     """
     Plot the RMS error between the predicted and truth data.
     """
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    
     def add_colorbar(ax, im, ticks=None):
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -53,8 +61,38 @@ def plot_rms(runner, truth, pred):
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
 
     time_lag = runner.config['params']['time_lag']
-    rms_true = np.sqrt(np.mean(truth[time_lag:]**2, axis=0)).transpose(2,0,1)
-    rms_pred = np.sqrt(np.mean(pred[time_lag:]**2, axis=0)).transpose(2,0,1)
+    rms_path = runner.paths_bib.pred_metrics_dir + 'rms.h5'
+
+    if os.path.exists(rms_path):
+        with h5py.File(rms_path, 'r') as f:
+            rms_true = f['rms_true'][:]
+            rms_pred = f['rms_pred'][:]
+            rms_error = f['error'][()]
+            rms_error_u = f['error_u'][()]
+            rms_error_v = f['error_v'][()]
+        
+    else:
+        rms_true = np.sqrt(np.mean(truth[time_lag:]**2, axis=0)).transpose(2,0,1)
+        rms_pred = np.sqrt(np.mean(pred[time_lag:]**2, axis=0)).transpose(2,0,1)
+
+        # RMS error 
+        rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
+        # RMS error on u
+        rms_error_u = l2_err_norm(true=rms_true[0], pred=rms_pred[0])
+        # RMS error on v
+        rms_error_v = l2_err_norm(true=rms_true[1], pred=rms_pred[1])
+
+        # save metrics to paths_bib.pred_metrics_dir
+        with h5py.File(rms_path, 'w') as f:
+            f.create_dataset('rms_true', data=rms_true)
+            f.create_dataset('rms_pred', data=rms_pred)
+            f.create_dataset('error', data=rms_error)
+            f.create_dataset('error_u', data=rms_error_u)
+            f.create_dataset('error_v', data=rms_error_v)
+
+    print(f"RMS error: {100*rms_error:.3f}%")
+    print(f"RMS error on u: {100*rms_error_u:.3f}%")
+    print(f"RMS error on v: {100*rms_error_v:.3f}%")
 
     nx = runner.l_config.nx
     ny = runner.l_config.ny
@@ -91,7 +129,8 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'rms_u_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
     c1 = axs[0].contourf(X, Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
@@ -106,35 +145,38 @@ def plot_rms(runner, truth, pred):
     axs[1].set_aspect('equal')
 
     fig.set_tight_layout(True)
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'rms_v_comparison.png', dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_v_comparison.png') , dpi=600, bbox_inches='tight', pad_inches=0.05)
+    plt.close()
 
-    # RMS error 
-    rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
-    print(f"RMS error: {100*rms_error:.3f}%")
-
-    # RMS error on u
-    rms_error_u = l2_err_norm(true=rms_true[0], pred=rms_pred[0])
-    print(f"RMS error on u: {100*rms_error_u:.3f}%")
-    # RMS error on v
-    rms_error_v = l2_err_norm(true=rms_true[1], pred=rms_pred[1])
-    print(f"RMS error on v: {100*rms_error_v:.3f}%")
+    
         
-    # save metrics to paths_bib.pred_metrics_dir
-    with h5py.File(runner.paths_bib.pred_metrics_dir + 'rms.h5', 'w') as f:
-        f.create_dataset('rms_true', data=rms_true)
-        f.create_dataset('rms_pred', data=rms_pred)
-        f.create_dataset('error', data=rms_error)
-        f.create_dataset('error_u', data=rms_error_u)
-        f.create_dataset('error_v', data=rms_error_v)
+    
 
-def plot_tke(runner, truth, pred):
+def plot_tke(runner, truth, pred, idx):
     """
     Plot the TKE of the predicted and truth data over time.
     """
-    tke_true = 1/2 * np.sum((truth/512)**2, axis=(1,2,3))
-    tke_pred = 1/2 * np.sum((pred/512)**2, axis=(1,2,3))
+    tke_path = runner.paths_bib.pred_metrics_dir + 'tke.h5'
+    
+    if os.path.exists(tke_path):
+        with h5py.File(tke_path, 'r') as f:
+            tke_true = f['tke_true'][:]
+            tke_pred = f['tke_pred'][:]
+            tke_error = f['error'][()]
+    else:
+        tke_true = 1/2 * np.sum((truth/512)**2, axis=(1,2,3))
+        tke_pred = 1/2 * np.sum((pred/512)**2, axis=(1,2,3))
+        # compute L2 error
+        tke_error = l2_err_norm(true=tke_true, pred=tke_pred)
+        
+        # save metrics to paths_bib.pred_metrics_dir
+        with h5py.File(runner.paths_bib.pred_metrics_dir + 'tke.h5', 'w') as f:
+            f.create_dataset('tke_true', data=tke_true)
+            f.create_dataset('tke_pred', data=tke_pred)
+            f.create_dataset('error', data=tke_error)
 
-    t = runner.val_indices[:len(tke_pred)] / 100
+    print(f"TKE error: {100*tke_error:.3f}%")
+    t = idx / 100
 
     size = 0.6
     plt.figure(figsize=(size*width,size*height))
@@ -142,15 +184,22 @@ def plot_tke(runner, truth, pred):
     plt.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='-.')
     plt.xlabel('Nondimensional time')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
-    plt.title('Comparison of True and Predicted TKE')
-    plt.legend()
+    plt.title('Comparison of True and Predicted TKE', pad=16)
+    plt.legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.025, 0.95),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'tke_comparison.png', dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_comparison.png'), dpi=600)
+    plt.close()
 
-    # compute L2 error
-    tke_error = l2_err_norm(true=tke_true, pred=tke_pred)
-    print(f"TKE error: {100*tke_error:.3f}%")
+    
 
     # psd of TKE
     f, Pxx_true = welch(tke_true, fs=100)
@@ -158,21 +207,23 @@ def plot_tke(runner, truth, pred):
     plt.figure(figsize=(size*width,size*height))
     plt.loglog(f, Pxx_true, label='True TKE', color='k', linestyle='-')
     plt.loglog(f, Pxx_pred, label='Predicted TKE', color='r', linestyle='-.')
-    plt.xlabel('Frequency (Hz)')
+    plt.xlabel('Nondimensional frequency')
     plt.ylabel('PSD(TKE)')
-    plt.title('Power Spectral Density of TKE')
-    plt.legend()
+    plt.title('Power Spectral Density of TKE', pad=16)
+    plt.legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.025, 0.95),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'tke_psd_comparison.png', dpi=600)
+    plt.tight_layout() #rect=[0, 0, 1, 0.95]
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_psd_comparison.png'), dpi=600)
+    plt.close()
 
-    # save metrics to paths_bib.pred_metrics_dir
-    with h5py.File(runner.paths_bib.pred_metrics_dir + 'tke.h5', 'w') as f:
-        f.create_dataset('tke_true', data=tke_true)
-        f.create_dataset('tke_pred', data=tke_pred)
-        f.create_dataset('error', data=tke_error)
-        f.create_dataset('psd_true', data=Pxx_true)
-        f.create_dataset('psd_pred', data=Pxx_pred)
+    
 
 
 def plot_PSDs(runner, data_dict):
@@ -200,16 +251,24 @@ def plot_PSDs(runner, data_dict):
     axs[1].loglog(psd_results['f'], psd_results['pred']['p1'][1], label='Predicted $v$', color='r', linestyle='-.')
     axs[0].set_ylabel('PSD($u_{p1}$)')
     axs[1].set_ylabel('PSD($v_{p1}$)')
-    axs[0].set_xlabel('Frequency (Hz)')
-    axs[1].set_xlabel('Frequency (Hz)')
-    axs[0].set_title('Power Spectral Density of $u$ at Point 1')
-    axs[1].set_title('Power Spectral Density of $v$ at Point 1')
-    axs[0].legend()
-    axs[1].legend()
+    axs[0].set_xlabel('Nondimensional frequency')
+    axs[1].set_xlabel('Nondimensional frequency')
+    # axs[0].legend()
+    # axs[1].legend()
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
-    fig.tight_layout()
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'psd_comparison_p1.png', dpi=600)
+    axs[1].legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.05, 0.9),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
+    fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 1')
+    fig.tight_layout(rect=[0, 0, 1, 1.15])
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p1.png'), dpi=600)
+    plt.close()
 
     # Plotting the PSD for U and V component point 2
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
@@ -219,24 +278,28 @@ def plot_PSDs(runner, data_dict):
     axs[1].loglog(psd_results['f'], psd_results['pred']['p2'][1], label='Predicted $v$', color='r', linestyle='-.')
     axs[0].set_ylabel('PSD($u_{p2}$)')
     axs[1].set_ylabel('PSD($v_{p2}$)')
-    axs[0].set_xlabel('Frequency (Hz)')
-    axs[1].set_xlabel('Frequency (Hz)')
-    axs[0].set_title('Power Spectral Density of $u$ at Point 2')
-    axs[1].set_title('Power Spectral Density of $v$ at Point 2')
-    axs[0].legend()
-    axs[1].legend()
+    axs[0].set_xlabel('Nondimensional frequency')
+    axs[1].set_xlabel('Nondimensional frequency')
+    axs[1].legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.05, 0.9),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
-    fig.tight_layout()
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'psd_comparison_p2.png', dpi=600)
+    fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 2')
+    fig.tight_layout(rect=[0, 0, 1, 1.15])
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p2.png'), dpi=600)
+    plt.close()
 
-def plot_autocorr(self, data_dict):
+def plot_autocorr(runner, data_dict):
     """
     Plot the autocorrelation of the data.
     """
     size = 1
-    
-
     
     fig, axs = plt.subplots(2, 2, figsize=(10, 5))
     lags, corr_true_u1 = corr(data_dict['truth']['p1'][:,0], data_dict['truth']['p1'][:,0])
@@ -274,7 +337,8 @@ def plot_autocorr(self, data_dict):
     axs[0,0].set_ylabel('Autocorrelation')
     axs[1,0].set_ylabel('Autocorrelation')
     fig.tight_layout()
-    plt.savefig(self.paths_bib.pred_fig_dir + 'autocorr_comparison.png', dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'autocorr_comparison.png'), dpi=600)
+    plt.close()
 
 
 
@@ -295,8 +359,8 @@ def plot_coherence(runner, data_dict):
 
     axs[0].set_ylabel('MSC($u_{p1}$)')
     axs[1].set_ylabel('MSC($v_{p1}$)')
-    axs[0].set_xlabel('Frequency (Hz)')
-    axs[1].set_xlabel('Frequency (Hz)')
+    axs[0].set_xlabel('Nondimensional frequency')
+    axs[1].set_xlabel('Nondimensional frequency')
     axs[0].set_ylim([0,1])
     axs[1].set_ylim([0,1])
     fig.suptitle('Magnitude Squared Coherence Between Truth and Prediction at Point 1')
@@ -304,7 +368,8 @@ def plot_coherence(runner, data_dict):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     
     fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'coherence_comparison_p1.png', dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p1.png'), dpi=600)
+    plt.close()
 
     # Compute Coherence for U and V component point 2
     f_u, Cxy_u = coher(data_dict['truth']['p2'][:,0], data_dict['pred']['p2'][:,0])
@@ -315,8 +380,8 @@ def plot_coherence(runner, data_dict):
     axs[1].semilogx(f_v, Cxy_v, label='Coherence', color='k', linestyle='-')
     axs[0].set_ylabel('MSC($u_{p2}$)')
     axs[1].set_ylabel('MSC($v_{p2}$)')
-    axs[0].set_xlabel('Frequency (Hz)')
-    axs[1].set_xlabel('Frequency (Hz)')
+    axs[0].set_xlabel('Nondimensional frequency')
+    axs[1].set_xlabel('Nondimensional frequency')
     axs[0].set_ylim([0,1])
     axs[1].set_ylim([0,1])
     fig.suptitle('Magnitude Squared Coherence Between Truth and Prediction at Point 2')
@@ -324,7 +389,8 @@ def plot_coherence(runner, data_dict):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
 
     fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(runner.paths_bib.pred_fig_dir + 'coherence_comparison_p2.png', dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p2.png'), dpi=600)
+    plt.close()
 
 def plot_points(runner):
     nx = runner.l_config.nx
@@ -373,6 +439,71 @@ def plot_points(runner):
     plt.tight_layout()
 
     plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=600)
+    plt.close()
+
+def plot_point_data(runner, data_dict, idx):
+    """
+    Plot the data at the points of interest.
+    """
+    size = 0.75
+    fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2), sharex=True, sharey=True)
+    
+    t = idx / 100  # Convert to nondimensional time
+    # Plotting the data for Point 1
+    axs[0,0].plot(t, data_dict['truth']['p1'][:,0], label='True', color='k', linestyle='-')
+    axs[0,0].plot(t, data_dict['pred']['p1'][:,0], label='Predicted', color='r', linestyle='-.')
+    axs[0,1].plot(t, data_dict['truth']['p1'][:,1], label='True', color='k', linestyle='-')
+    axs[0,1].plot(t, data_dict['pred']['p1'][:,1], label='Predicted', color='r', linestyle='-.')
+    
+    # axs[0,0].set_title('Point 1 $u$-component')
+    # axs[0,1].set_title('Point 1 $v$-component')
+    
+    axs[0,0].set_ylabel('$u_{p1}$')
+    axs[0,1].set_ylabel('$v_{p1}$')
+    
+    # Plotting the data for Point 2
+    axs[1,0].plot(t, data_dict['truth']['p2'][:,0], label='True', color='k', linestyle='-')
+    axs[1,0].plot(t, data_dict['pred']['p2'][:,0], label='Predicted', color='r', linestyle='-.')
+    axs[1,1].plot(t, data_dict['truth']['p2'][:,1], label='True', color='k', linestyle='-')
+    axs[1,1].plot(t, data_dict['pred']['p2'][:,1], label='Predicted', color='r', linestyle='-.')
+    
+    # axs[1,0].set_title('Point 2 $u$-component')
+    # axs[1,1].set_title('Point 2 $v$-component')
+    
+    axs[1,0].set_ylabel('$u_{p2}$')
+    axs[1,1].set_ylabel('$v_{p2}$')
+    
+    axs[1,0].set_xlabel('Nondimensional time')
+    axs[1,1].set_xlabel('Nondimensional time')
+
+    for ax in axs.flat:
+        # ax.legend(
+        #     loc = 'upper center',
+        #     # bbox_to_anchor = (0.5, 1),  # center top, above axes
+        #     ncol = 2,                      # spread horizontally
+        #     frameon = False                # removes legend border
+        # ) 
+        ax.grid(visible=True, linestyle='--', linewidth=0.5)
+        
+    axs[0,1].legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.05, 0.9),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
+    fig.suptitle('Velocity Data at Points of Interest')
+    fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
+    # fig.tight_layout()
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'point_data_comparison.png'), dpi=600)
+    plt.close()
+
+    # calculate L2 error for each point
+    l2_error_p1 = l2_err_norm(true=data_dict['truth']['p1'], pred=data_dict['pred']['p1'])
+    l2_error_p2 = l2_err_norm(true=data_dict['truth']['p2'], pred=data_dict['pred']['p2'])
+    print(f"L2 error at Point 1: {100*l2_error_p1:.3f}%")
+    print(f"L2 error at Point 2: {100*l2_error_p2:.3f}%")
 
 
 
@@ -425,6 +556,111 @@ def attention_maps(runner):
 
         plt.tight_layout()
         plt.savefig(runner.paths_bib.fig_dir + 'attention_weights.png', dpi=600)
+        plt.close()
+
+
+def animate(runner):
+    """
+    Create an animation of the truth and predicted data.
+    """
+    import imageio
+
+    time_lag = runner.config['params']['time_lag']
+    time_lim = 1000
+    nx = runner.l_config.nx
+    ny = runner.l_config.ny
+    nx_t = runner.l_config.nx_t
+    ny_t = runner.l_config.ny_t
+    # t = idx / 100  # Convert to nondimensional time
+
+    for pred_file in os.listdir(runner.paths_bib.predictions_dir):
+        if pred_file.endswith('.h5') and 'rec' in pred_file:
+            print(f"Loading predictions from {pred_file}")
+            pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
+            with h5py.File(os.path.join(runner.paths_bib.predictions_dir, pred_file), 'r') as f:
+                num_snaps = f['Q_rec'].shape[0]
+                if num_snaps > time_lim:
+                    num_snaps = time_lim
+
+                pred = f['Q_rec'][time_lag:num_snaps:2]
+                idx = f['idx'][time_lag:num_snaps:2]
+
+            print(f'Loading truth from {runner.paths_bib.data_path}')
+            with h5py.File(runner.paths_bib.data_path, 'r') as f:
+                mean = f['mean'][:nx_t, :ny_t]
+                truth = f['UV'][idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+            
+            # Root mean squared error normalized by range of truth
+            error_plot = 100 * abs(truth - pred) / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
+
+            Q_plot = truth / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
+            Q_plot_pred = pred / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
+
+            
+            frames = []
+            for i, id in enumerate(idx):  # Number of frames
+                if i % 50 == 0:
+                    print(f'Processing frame {i+1}/{len(idx)}')
+                fig, axs = plt.subplots(2,3, figsize=(8,5.5))
+                axs[0, 0].imshow(Q_plot[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)
+                axs[0, 0].set_title('True $u$')
+
+                axs[1, 0].imshow(Q_plot[i, :, :, 1], cmap='seismic', origin='lower', vmin=-1, vmax=1)
+                axs[1, 0].set_title('True $v$')
+
+                axs[0, 1].imshow(Q_plot_pred[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)
+                axs[0, 1].set_title('Predicted $u$')
+
+                axs[1, 1].imshow(Q_plot_pred[i, :, :, 1], cmap='seismic', origin='lower', vmin=-1, vmax=1)
+                axs[1, 1].set_title('Predicted $v$')
+
+
+                im = axs[0, 2].imshow(error_plot[i, :, :, 0], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
+                
+                axs[0, 2].set_title('Error\% $u$')
+                axs[0, 2].set_aspect('equal')
+                divider = make_axes_locatable(axs[0, 2])
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                cbar = fig.colorbar(im, cax=cax, format='%.0f')
+                im.set_clim(vmin=0, vmax=100) # Set color limits for consistency
+
+                cbar.set_label('Error (\%)', rotation=270, labelpad=15)
+                im = axs[1, 2].imshow(error_plot[i, :, :, 1], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
+                axs[1, 2].set_title('Error\% $v$')
+                axs[1, 2].set_aspect('equal')
+                divider = make_axes_locatable(axs[1, 2])
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                cbar = fig.colorbar(im, cax=cax, format='%.0f')
+                im.set_clim(vmin=0, vmax=100) # Set color limits for consistency
+                cbar.set_label('Error (\%)', rotation=270, labelpad=15)
+                
+                for ax in axs.flat:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.set_xticklabels([])
+                    ax.set_yticklabels([])
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor('black')
+                        spine.set_linewidth(1.5)
+                plt.tight_layout()
+                
+                # Save the current frame
+                fig.canvas.draw()
+                frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+                frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                frames.append(frame)
+                plt.close(fig)
+
+            # Save as GIF
+            # imageio.mimsave(runner.paths_bib.anim_dir + pred_name + '.gif', frames, fps=30, loop=0)
+
+            # save as mp4
+            writer = imageio.get_writer(runner.paths_bib.anim_dir + pred_name + '.mp4', fps=30)
+            for frame in frames:
+                writer.append_data(frame)
+            writer.close()
+
+    
 
 
 

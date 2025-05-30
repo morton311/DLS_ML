@@ -3,6 +3,7 @@ from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import csr_matrix
 import time
+import sys
 import h5py
 from tqdm import tqdm
 from scipy.sparse.linalg import factorized
@@ -471,12 +472,17 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
             del rec_file['Q_rec']
         rec_file.create_dataset('Q_rec', (dof_u.shape[-1], config.nx_t, config.ny_t, 2), dtype='float32')
 
-        for id in tqdm(range(num_batches)):
+        for id in range(num_batches):
+            
+
             snap_start = id * batch_size
             snap_end = (id + 1) * batch_size
             if snap_end >= num_snaps:
                 snap_end = num_snaps
             batch_size = snap_end - snap_start
+            time_start = time.time()
+            sys.stdout.write(f'Processing batch {id+1}/{num_batches}, batch size: {batch_size}')
+            sys.stdout.flush()
 
             Q_rec_u = np.zeros((config.nx_t, config.ny_t, batch_size))
             Q_rec_v = np.zeros((config.nx_t, config.ny_t, batch_size))
@@ -499,9 +505,20 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
                     Q_rec_u[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_u
                     Q_rec_v[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_v
 
-
             rec_file['Q_rec'][snap_start:snap_end, :, :, 0] = Q_rec_u.transpose(2,0,1)
             rec_file['Q_rec'][snap_start:snap_end, :, :, 1] = Q_rec_v.transpose(2,0,1)
+
+            time_end = time.time()
+            batch_time = time_end - time_start
+            sys.stdout.write(f', processed in {batch_time:.2f}s')
+            if id+1 != num_batches:
+                proj_time = (num_batches - (id + 1)) * batch_time / 60 # in minutes
+                # convert to min:sec format
+                proj_time_str = f'{int(proj_time)}m {int((proj_time - int(proj_time)) * 60)}s'
+                sys.stdout.write(f' -> Proj. time: {proj_time_str}')
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+        sys.stdout.write('\n')
 
 def latent_eval(runner):
     print(f"{'#'*20}\t{'Evaluating latent...':<20}\t{'#'*20}")

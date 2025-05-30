@@ -475,7 +475,7 @@ class runner(nn.Module):
                 dof_u = f['dof_u'][idx]
                 dof_v = f['dof_v'][idx]
             initial_input = np.concatenate((dof_u, dof_v), axis=1)
-            print(f"Initial input shape: {initial_input.shape}")
+            # print(f"Initial input shape: {initial_input.shape}")
 
             # make predictions
             pred = self._predict(initial_input, num_predictions=num_predictions)
@@ -484,16 +484,16 @@ class runner(nn.Module):
             pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
             pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
 
-            print('Saving predictions to file')
+            print(f"Saving predictions to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
             with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
                 f.create_dataset('dof_u', data=pred_dof_u)
                 f.create_dataset('dof_v', data=pred_dof_v)
                 f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
 
-            print(f"Prediction saved to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
+            print(f"Saved!\n")
 
         # reconstruct the predictions
-        print(f"Reconstructing predictions")
+        print(f"\nReconstructing all predictions")
         self._pred_rec()
 
 
@@ -540,7 +540,11 @@ class runner(nn.Module):
 
         start_time = time.time()
         with torch.no_grad():
-            for _ in range(num_predictions):
+            interval = num_predictions // 10
+            for n in range(num_predictions):
+                if n % interval == 0:
+                    print(f"Predicting step {n+1}/{num_predictions}")
+                
                 output = self.model(current_input)
                 # print('Output shape: ', output[np.newaxis,:,:].shape)
                 predictions.append(output.to('cpu').numpy())  # Ensure tensor is moved to CPU before converting to NumPy
@@ -566,25 +570,26 @@ class runner(nn.Module):
         # loop over all prediction sets in the predictions directory
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
             if pred_file.endswith('.h5') and 'rec' not in pred_file:
-                print(f"Loading predictions from {pred_file}")
+                print(f"Reconstructing predictions from {pred_file}")
                 rec_path = os.path.join(self.paths_bib.predictions_dir, 'rec_' + pred_file)
                 pred_path = os.path.join(self.paths_bib.predictions_dir, pred_file)
                 with h5py.File(pred_path, 'r') as f:
                     pred_dof_u = f['dof_u'][:]
                     pred_dof_v = f['dof_v'][:]
+                    idx = f['idx'][:]
 
                 # Load the latent config
                 with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
                     latent_config = pickle.load(f)
+
                 dls.gfem_recon_long(config=latent_config,
                                     rec_path=rec_path,
                                     dof_u=pred_dof_u.T,
                                     dof_v=pred_dof_v.T,
                                     batch_size=1000)
+                
                 # copy idx field from original file to rec file
-                with h5py.File(pred_path, 'r') as f:
-                    idx = f['idx'][:]
-                with h5py.File(rec_path, 'w') as f:
+                with h5py.File(rec_path, 'a') as f:
                     f.create_dataset('idx', data=idx)
                 
 
@@ -621,28 +626,34 @@ class runner(nn.Module):
         point_2 = (x[x_closest2], y[y_closest])
         point_1_idx = (x_closest1, y_closest)
         point_2_idx = (x_closest2, y_closest)
-
+        
         # load indices of validation set
         # with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
         #     indices = pickle.load(f)
         #     self.val_indices = indices['val_indices']
+
+        eval_lim = 5000
 
         # Load the predictions
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
             if pred_file.endswith('.h5') and 'rec' in pred_file:
                 print(f"Loading predictions from {pred_file}")
                 pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
-                self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.figures_dir, pred_name)
-                self.paths_bib.pred_metrics_dir = os.path.join(self.paths_bib.metrics_dir, pred_name)
+                self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.fig_dir, pred_name + '/')
+                self.paths_bib.pred_metrics_dir = os.path.join(self.paths_bib.metrics_dir, pred_name + '/')
                 
                 os.makedirs(self.paths_bib.pred_fig_dir, exist_ok=True)
                 os.makedirs(self.paths_bib.pred_metrics_dir, exist_ok=True)
 
                 with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
-                    pred = f['Q_rec'][:]
-                    uv_rec_p1 = pred[:, point_1_idx[0], point_1_idx[1], :]
-                    uv_rec_p2 = pred[:, point_2_idx[0], point_2_idx[1], :]
-                    idx = f['idx'][:]
+                    len_pred = f['Q_rec'].shape[0]
+                    if len_pred > eval_lim:
+                        print(f"Limiting predictions to {eval_lim} samples")
+                        len_pred = eval_lim
+                    pred = f['Q_rec'][:len_pred]
+                    uv_rec_p1 = pred[:len_pred, point_1_idx[0], point_1_idx[1], :]
+                    uv_rec_p2 = pred[:len_pred, point_2_idx[0], point_2_idx[1], :]
+                    idx = f['idx'][:len_pred]
                 
                 print(f'Loading truth from {self.paths_bib.data_path}')
                 with h5py.File(self.paths_bib.data_path, 'r') as f:
@@ -667,12 +678,12 @@ class runner(nn.Module):
                 }
 
                 # plot losses, RMS, TKE, Coherence
-                print(f'Generating plots')
+                print(f'\nGenerating plots, saving')
                 plots.plot_loss(self)
                 print('Loss plot done')
                 plots.plot_rms(self, truth=truth, pred=pred)
-                print('RMS plot done')
-                plots.plot_tke(self, truth=truth, pred=pred)
+                print('RMS plot done\n')
+                plots.plot_tke(self, truth=truth, pred=pred, idx=idx)
                 print('TKE plot done')
                 plots.plot_PSDs(self, point_dict)
                 print('PSD plot done')
@@ -680,6 +691,9 @@ class runner(nn.Module):
                 print('Coherence plot done')
                 plots.plot_points(self)
                 print('Point plot done')
+                plots.plot_point_data(self, point_dict, idx=idx)
+                print('Point data plot done')
                 plots.attention_maps(self)
-                print('Attention map plot done')
+                print('Attention map plot done\n\n')
+                
 
