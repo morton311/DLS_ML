@@ -49,11 +49,14 @@ def plot_loss(runner):
     plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=600)
     plt.close()
 
-def plot_rms(runner, truth, pred):
+def plot_rms(runner, truth, pred, eval_idx, true_idx):
     """
     Plot the RMS error between the predicted and truth data.
     """
     
+    if len(eval_idx) == len(true_idx):
+        eval_idx = range(len(true_idx))
+
     def add_colorbar(ax, im, ticks=None):
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -63,7 +66,7 @@ def plot_rms(runner, truth, pred):
     time_lag = runner.config['params']['time_lag']
     rms_path = runner.paths_bib.pred_metrics_dir + 'rms.h5'
 
-    if os.path.exists(rms_path):
+    if os.path.exists(rms_path) and not runner.config['overwrite'] == 'r':
         with h5py.File(rms_path, 'r') as f:
             rms_true = f['rms_true'][:]
             rms_pred = f['rms_pred'][:]
@@ -72,8 +75,8 @@ def plot_rms(runner, truth, pred):
             rms_error_v = f['error_v'][()]
         
     else:
-        rms_true = np.sqrt(np.mean(truth[time_lag:]**2, axis=0)).transpose(2,0,1)
-        rms_pred = np.sqrt(np.mean(pred[time_lag:]**2, axis=0)).transpose(2,0,1)
+        rms_true = np.sqrt(np.mean(truth[eval_idx[time_lag:]]**2, axis=0)).transpose(2,0,1)
+        rms_pred = np.sqrt(np.mean(pred[time_lag:len(eval_idx)]**2, axis=0)).transpose(2,0,1)
 
         # RMS error 
         rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
@@ -152,13 +155,15 @@ def plot_rms(runner, truth, pred):
         
     
 
-def plot_tke(runner, truth, pred, idx):
+def plot_tke(runner, truth, pred, idx, eval_idx, true_idx):
     """
     Plot the TKE of the predicted and truth data over time.
     """
+    time_lag = runner.config['params']['time_lag']
     tke_path = runner.paths_bib.pred_metrics_dir + 'tke.h5'
-    
-    if os.path.exists(tke_path):
+    if len(eval_idx) == len(true_idx):
+        eval_idx = range(len(true_idx))
+    if os.path.exists(tke_path) and not runner.config['overwrite'] == 'r':
         with h5py.File(tke_path, 'r') as f:
             tke_true = f['tke_true'][:]
             tke_pred = f['tke_pred'][:]
@@ -167,7 +172,7 @@ def plot_tke(runner, truth, pred, idx):
         tke_true = 1/2 * np.sum((truth/512)**2, axis=(1,2,3))
         tke_pred = 1/2 * np.sum((pred/512)**2, axis=(1,2,3))
         # compute L2 error
-        tke_error = l2_err_norm(true=tke_true, pred=tke_pred)
+        tke_error = l2_err_norm(true=tke_true[eval_idx[time_lag:]], pred=tke_pred[time_lag:len(eval_idx)])
         
         # save metrics to paths_bib.pred_metrics_dir
         with h5py.File(runner.paths_bib.pred_metrics_dir + 'tke.h5', 'w') as f:
@@ -177,10 +182,11 @@ def plot_tke(runner, truth, pred, idx):
 
     print(f"TKE error: {100*tke_error:.3f}%")
     t = idx / 100
+    t_true = np.array(true_idx) / 100
 
     size = 0.6
     plt.figure(figsize=(size*width,size*height))
-    plt.plot(t, tke_true, label='True TKE', color='k', linestyle='-')
+    plt.plot(t_true, tke_true, label='True TKE', color='k', linestyle='-')
     plt.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='-.')
     plt.xlabel('Nondimensional time')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
@@ -203,7 +209,7 @@ def plot_tke(runner, truth, pred, idx):
 
     # psd of TKE
     f, Pxx_true = welch(tke_true, fs=100)
-    f, Pxx_pred = welch(tke_pred, fs=100)
+    f, Pxx_pred = welch(tke_pred[time_lag:], fs=100)
     plt.figure(figsize=(size*width,size*height))
     plt.loglog(f, Pxx_true, label='True TKE', color='k', linestyle='-')
     plt.loglog(f, Pxx_pred, label='Predicted TKE', color='r', linestyle='-.')
@@ -229,14 +235,15 @@ def plot_tke(runner, truth, pred, idx):
 def plot_PSDs(runner, data_dict):
 
     psd_results = {}
+    time_lag = runner.config['params']['time_lag']
     # Loop through data types (ground truth and prediction) and points
     for data_type, points in data_dict.items():
         psd_results[data_type] = {}
         for point_name, data in points.items():
             psd_results[data_type][point_name] = {}
             # Compute PSD for the u-component
-            f_u, Pxx_u = psd(data[:, 0])
-            f_v, Pxx_v = psd(data[:, 1])
+            f_u, Pxx_u = psd(data[time_lag:, 0])
+            f_v, Pxx_v = psd(data[time_lag:, 1])
             # Combine u and v components into a single array
             Pxx = np.array([Pxx_u, Pxx_v])
             psd_results[data_type][point_name] = Pxx
@@ -297,7 +304,7 @@ def plot_PSDs(runner, data_dict):
 
 def plot_autocorr(runner, data_dict):
     """
-    Plot the autocorrelation of the data.
+    Plot the autocorrelation of the data. Not yet implemented
     """
     size = 1
     
@@ -342,16 +349,22 @@ def plot_autocorr(runner, data_dict):
 
 
 
-def plot_coherence(runner, data_dict):
+def plot_coherence(runner, data_dict, eval_idx, true_idx):
     """
     Plot the coherence between the predicted and truth data.
     """
+    time_lag = runner.config['params']['time_lag']
     size = 1
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     
+    if len(eval_idx) == len(true_idx):
+        eval_idx = range(len(true_idx))
     # Compute Coherence for U and V component point 1
-    f_u, Cxy_u = coher(data_dict['truth']['p1'][:,0], data_dict['pred']['p1'][:,0])
-    f_v, Cxy_v = coher(data_dict['truth']['p1'][:,1], data_dict['pred']['p1'][:,1])
+    truth = data_dict['truth']['p1'][eval_idx[time_lag:], :]
+    pred = data_dict['pred']['p1'][time_lag:len(eval_idx), :]
+
+    f_u, Cxy_u = coher(truth[:,0], pred[:,0])
+    f_v, Cxy_v = coher(truth[:,1], pred[:,1])
 
     # Plotting the Coherence for U and V component point 1
     axs[0].semilogx(f_u, Cxy_u, label='Coherence', color='k', linestyle='-')
@@ -372,8 +385,13 @@ def plot_coherence(runner, data_dict):
     plt.close()
 
     # Compute Coherence for U and V component point 2
-    f_u, Cxy_u = coher(data_dict['truth']['p2'][:,0], data_dict['pred']['p2'][:,0])
-    f_v, Cxy_v = coher(data_dict['truth']['p2'][:,1], data_dict['pred']['p2'][:,1])
+
+    truth = data_dict['truth']['p2'][eval_idx[time_lag:], :]
+    pred = data_dict['pred']['p2'][time_lag:len(eval_idx), :]
+
+
+    f_u, Cxy_u = coher(truth[:,0], pred[:,0])
+    f_v, Cxy_v = coher(truth[:,1], pred[:,1])
     # Plotting the Coherence for U and V component point 2
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     axs[0].semilogx(f_u, Cxy_u, label='Coherence', color='k', linestyle='-')
@@ -441,18 +459,24 @@ def plot_points(runner):
     plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=600)
     plt.close()
 
-def plot_point_data(runner, data_dict, idx):
+def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     """
     Plot the data at the points of interest.
     """
+    time_lag = runner.config['params']['time_lag']
     size = 0.75
     fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2), sharex=True, sharey=True)
+
+    if len(eval_idx) == len(true_idx):
+        eval_idx = range(len(true_idx))
     
     t = idx / 100  # Convert to nondimensional time
+    t_true = np.array(true_idx) / 100
+
     # Plotting the data for Point 1
-    axs[0,0].plot(t, data_dict['truth']['p1'][:,0], label='True', color='k', linestyle='-')
+    axs[0,0].plot(t_true, data_dict['truth']['p1'][:,0], label='True', color='k', linestyle='-')
     axs[0,0].plot(t, data_dict['pred']['p1'][:,0], label='Predicted', color='r', linestyle='-.')
-    axs[0,1].plot(t, data_dict['truth']['p1'][:,1], label='True', color='k', linestyle='-')
+    axs[0,1].plot(t_true, data_dict['truth']['p1'][:,1], label='True', color='k', linestyle='-')
     axs[0,1].plot(t, data_dict['pred']['p1'][:,1], label='Predicted', color='r', linestyle='-.')
     
     # axs[0,0].set_title('Point 1 $u$-component')
@@ -462,9 +486,9 @@ def plot_point_data(runner, data_dict, idx):
     axs[0,1].set_ylabel('$v_{p1}$')
     
     # Plotting the data for Point 2
-    axs[1,0].plot(t, data_dict['truth']['p2'][:,0], label='True', color='k', linestyle='-')
+    axs[1,0].plot(t_true, data_dict['truth']['p2'][:,0], label='True', color='k', linestyle='-')
     axs[1,0].plot(t, data_dict['pred']['p2'][:,0], label='Predicted', color='r', linestyle='-.')
-    axs[1,1].plot(t, data_dict['truth']['p2'][:,1], label='True', color='k', linestyle='-')
+    axs[1,1].plot(t_true, data_dict['truth']['p2'][:,1], label='True', color='k', linestyle='-')
     axs[1,1].plot(t, data_dict['pred']['p2'][:,1], label='Predicted', color='r', linestyle='-.')
     
     # axs[1,0].set_title('Point 2 $u$-component')
@@ -500,8 +524,8 @@ def plot_point_data(runner, data_dict, idx):
     plt.close()
 
     # calculate L2 error for each point
-    l2_error_p1 = l2_err_norm(true=data_dict['truth']['p1'], pred=data_dict['pred']['p1'])
-    l2_error_p2 = l2_err_norm(true=data_dict['truth']['p2'], pred=data_dict['pred']['p2'])
+    l2_error_p1 = l2_err_norm(true=data_dict['truth']['p1'][eval_idx[time_lag:]], pred=data_dict['pred']['p1'][time_lag:len(eval_idx)])
+    l2_error_p2 = l2_err_norm(true=data_dict['truth']['p2'][eval_idx[time_lag:]], pred=data_dict['pred']['p2'][time_lag:len(eval_idx)])
     print(f"L2 error at Point 1: {100*l2_error_p1:.3f}%")
     print(f"L2 error at Point 2: {100*l2_error_p2:.3f}%")
 
@@ -566,7 +590,7 @@ def animate(runner):
     import imageio
 
     time_lag = runner.config['params']['time_lag']
-    time_lim = 1000
+    time_lim = 1500
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
@@ -574,7 +598,7 @@ def animate(runner):
     # t = idx / 100  # Convert to nondimensional time
 
     for pred_file in os.listdir(runner.paths_bib.predictions_dir):
-        if pred_file.endswith('.h5') and 'rec' in pred_file:
+        if pred_file.endswith('.h5') and 'rec' in pred_file and any(key in pred_file for key in runner.config['predictions'].keys()):
             print(f"Loading predictions from {pred_file}")
             pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
             with h5py.File(os.path.join(runner.paths_bib.predictions_dir, pred_file), 'r') as f:
@@ -587,8 +611,11 @@ def animate(runner):
 
             print(f'Loading truth from {runner.paths_bib.data_path}')
             with h5py.File(runner.paths_bib.data_path, 'r') as f:
+                true_num_snaps = f['UV'].shape[0]
                 mean = f['mean'][:nx_t, :ny_t]
-                truth = f['UV'][idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+                truth = np.zeros(pred.shape, dtype=np.float32)
+                for i in range(len(idx)):
+                    truth[i] = f['UV'][min(idx[i],true_num_snaps-1), :nx_t, :ny_t, :] - mean
             
             # Root mean squared error normalized by range of truth
             error_plot = 100 * abs(truth - pred) / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
@@ -596,7 +623,7 @@ def animate(runner):
             Q_plot = truth / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
             Q_plot_pred = pred / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
 
-            
+            num_overlap = (true_num_snaps - idx[0]) // 2
             frames = []
             for i, id in enumerate(idx):  # Number of frames
                 if i % 50 == 0:
@@ -614,8 +641,8 @@ def animate(runner):
                 axs[1, 1].imshow(Q_plot_pred[i, :, :, 1], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[1, 1].set_title('Predicted $v$')
 
-
-                im = axs[0, 2].imshow(error_plot[i, :, :, 0], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
+                
+                im = axs[0, 2].imshow(error_plot[min(i, num_overlap), :, :, 0], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
                 
                 axs[0, 2].set_title('Error\% $u$')
                 axs[0, 2].set_aspect('equal')
@@ -625,7 +652,7 @@ def animate(runner):
                 im.set_clim(vmin=0, vmax=100) # Set color limits for consistency
 
                 cbar.set_label('Error (\%)', rotation=270, labelpad=15)
-                im = axs[1, 2].imshow(error_plot[i, :, :, 1], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
+                im = axs[1, 2].imshow(error_plot[min(i, num_overlap), :, :, 1], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
                 axs[1, 2].set_title('Error\% $v$')
                 axs[1, 2].set_aspect('equal')
                 divider = make_axes_locatable(axs[1, 2])

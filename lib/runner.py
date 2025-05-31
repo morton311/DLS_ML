@@ -464,11 +464,19 @@ class runner(nn.Module):
 
             if self.config['predictions'][pred_name]['init'] == 'val':
                 idx = np.arange(self.val_indices[0], self.val_indices[0] + time_lag)
-                num_predictions = min(pred_lim, len(self.val_indices) - time_lag)
+                if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
+                    num_predictions = pred_lim
+                else:
+                    num_predictions = min(pred_lim, len(self.val_indices) - time_lag)
 
             elif self.config['predictions'][pred_name]['init'] == 'train':
                 idx = np.arange(0, time_lag)
-                num_predictions = min(pred_lim, num_snaps - time_lag)
+                if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
+                    num_predictions = pred_lim
+                else:
+                    num_predictions = min(pred_lim, num_snaps - time_lag)
+
+            
 
             # get initial sequence
             with h5py.File(self.paths_bib.latent_path, 'r') as f:
@@ -569,7 +577,7 @@ class runner(nn.Module):
 
         # loop over all prediction sets in the predictions directory
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
-            if pred_file.endswith('.h5') and 'rec' not in pred_file:
+            if pred_file.endswith('.h5') and 'rec' not in pred_file and any(key in pred_file for key in self.config['predictions'].keys()):
                 print(f"Reconstructing predictions from {pred_file}")
                 rec_path = os.path.join(self.paths_bib.predictions_dir, 'rec_' + pred_file)
                 pred_path = os.path.join(self.paths_bib.predictions_dir, pred_file)
@@ -627,16 +635,18 @@ class runner(nn.Module):
         point_1_idx = (x_closest1, y_closest)
         point_2_idx = (x_closest2, y_closest)
         
+        time_lag = self.config['params']['time_lag']
+
         # load indices of validation set
         # with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
         #     indices = pickle.load(f)
         #     self.val_indices = indices['val_indices']
 
-        eval_lim = 5000
+        eval_lim = 5064
 
         # Load the predictions
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
-            if pred_file.endswith('.h5') and 'rec' in pred_file:
+            if pred_file.endswith('.h5') and 'rec' in pred_file and any(key in pred_file for key in self.config['predictions'].keys()):
                 print(f"Loading predictions from {pred_file}")
                 pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
                 self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.fig_dir, pred_name + '/')
@@ -657,14 +667,29 @@ class runner(nn.Module):
                 
                 print(f'Loading truth from {self.paths_bib.data_path}')
                 with h5py.File(self.paths_bib.data_path, 'r') as f:
+                    num_snaps = f['UV'].shape[0]
+                    if idx[0] + time_lag + len_pred > num_snaps:
+                        print(f"error metrics will be limited to t={idx[0]/100} to t={(num_snaps)/100}")
+                        eval_len = num_snaps - idx[0]
+                        eval_idx = idx[:eval_len]
+                    else:
+                        eval_len = len_pred
+                        eval_idx = idx
+
+                    if idx[0] < 3000 and len_pred <= eval_lim and self.config['predictions'][pred_name].get('arg', '') == 'extrap':
+                        true_idx = list(range(0, min(num_snaps, idx[0] + eval_len)))
+                    else:
+                        true_idx = eval_idx
                     mean = f['mean'][:nx_t, :ny_t]
-                    truth = f['UV'][idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+                    truth = f['UV'][true_idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
                     mean_uv_p1 = f['mean'][point_1_idx[0], point_1_idx[1], :]
                     mean_uv_p2 = f['mean'][point_2_idx[0], point_2_idx[1], :]
-                    uv_p1 = f['UV'][idx, point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
-                    uv_p2 = f['UV'][idx, point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
+                    uv_p1 = f['UV'][true_idx, point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
+                    uv_p2 = f['UV'][true_idx, point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
 
                 print(f"Truth shape: {truth.shape}, Pred shape: {pred.shape}")
+
+                print(eval_idx[0], eval_idx[-1])
 
                 point_dict = {
                     "truth": {
@@ -681,17 +706,17 @@ class runner(nn.Module):
                 print(f'\nGenerating plots, saving')
                 plots.plot_loss(self)
                 print('Loss plot done')
-                plots.plot_rms(self, truth=truth, pred=pred)
+                plots.plot_rms(self, truth=truth, pred=pred, eval_idx=eval_idx, true_idx=true_idx)
                 print('RMS plot done\n')
-                plots.plot_tke(self, truth=truth, pred=pred, idx=idx)
+                plots.plot_tke(self, truth=truth, pred=pred, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
                 print('TKE plot done')
                 plots.plot_PSDs(self, point_dict)
                 print('PSD plot done')
-                plots.plot_coherence(self, point_dict)
+                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
                 print('Coherence plot done')
                 plots.plot_points(self)
                 print('Point plot done')
-                plots.plot_point_data(self, point_dict, idx=idx)
+                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
                 print('Point data plot done')
                 plots.attention_maps(self)
                 print('Attention map plot done\n\n')

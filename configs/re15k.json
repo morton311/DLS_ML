@@ -37,6 +37,12 @@
         "seen": {
             "init":     "train",
             "lim":      null
+        },
+        "long":
+        {
+            "init":     "val",
+            "lim":      5000,
+            "arg":      "extrap"
         }
     }
 }
