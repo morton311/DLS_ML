@@ -49,13 +49,10 @@ def plot_loss(runner):
     plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=600)
     plt.close()
 
-def plot_rms(runner, truth, pred, eval_idx, true_idx):
+def plot_rms(runner, pred_path, eval_idx, true_idx):
     """
     Plot the RMS error between the predicted and truth data.
     """
-    
-    if len(eval_idx) == len(true_idx):
-        eval_idx = range(len(true_idx))
 
     def add_colorbar(ax, im, ticks=None):
         divider = make_axes_locatable(ax)
@@ -63,35 +60,15 @@ def plot_rms(runner, truth, pred, eval_idx, true_idx):
         cbar = fig.colorbar(im, cax=cax, format='%.2f', ticks=ticks)
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
 
-    time_lag = runner.config['params']['time_lag']
-    rms_path = runner.paths_bib.pred_metrics_dir + 'rms.h5'
-
-    if os.path.exists(rms_path) and not runner.config['overwrite'] == 'r':
-        with h5py.File(rms_path, 'r') as f:
-            rms_true = f['rms_true'][:]
-            rms_pred = f['rms_pred'][:]
-            rms_error = f['error'][()]
-            rms_error_u = f['error_u'][()]
-            rms_error_v = f['error_v'][()]
-        
-    else:
-        rms_true = np.sqrt(np.mean(truth[eval_idx[time_lag:]]**2, axis=0)).transpose(2,0,1)
-        rms_pred = np.sqrt(np.mean(pred[time_lag:len(eval_idx)]**2, axis=0)).transpose(2,0,1)
-
-        # RMS error 
-        rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
-        # RMS error on u
-        rms_error_u = l2_err_norm(true=rms_true[0], pred=rms_pred[0])
-        # RMS error on v
-        rms_error_v = l2_err_norm(true=rms_true[1], pred=rms_pred[1])
-
-        # save metrics to paths_bib.pred_metrics_dir
-        with h5py.File(rms_path, 'w') as f:
-            f.create_dataset('rms_true', data=rms_true)
-            f.create_dataset('rms_pred', data=rms_pred)
-            f.create_dataset('error', data=rms_error)
-            f.create_dataset('error_u', data=rms_error_u)
-            f.create_dataset('error_v', data=rms_error_v)
+    with h5py.File(pred_path, 'r') as f:
+        rms_true = f['rms_true'][:]
+        rms_pred = f['rms_pred'][:]
+    # RMS error 
+    rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
+    # RMS error on u
+    rms_error_u = l2_err_norm(true=rms_true[0], pred=rms_pred[0])
+    # RMS error on v
+    rms_error_v = l2_err_norm(true=rms_true[1], pred=rms_pred[1])
 
     print(f"RMS error: {100*rms_error:.3f}%")
     print(f"RMS error on u: {100*rms_error_u:.3f}%")
@@ -155,30 +132,20 @@ def plot_rms(runner, truth, pred, eval_idx, true_idx):
         
     
 
-def plot_tke(runner, truth, pred, idx, eval_idx, true_idx):
+def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     """
     Plot the TKE of the predicted and truth data over time.
     """
     time_lag = runner.config['params']['time_lag']
-    tke_path = runner.paths_bib.pred_metrics_dir + 'tke.h5'
-    if len(eval_idx) == len(true_idx):
-        eval_idx = range(len(true_idx))
-    if os.path.exists(tke_path) and not runner.config['overwrite'] == 'r':
-        with h5py.File(tke_path, 'r') as f:
-            tke_true = f['tke_true'][:]
-            tke_pred = f['tke_pred'][:]
-            tke_error = f['error'][()]
-    else:
-        tke_true = 1/2 * np.sum((truth/512)**2, axis=(1,2,3))
-        tke_pred = 1/2 * np.sum((pred/512)**2, axis=(1,2,3))
-        # compute L2 error
-        tke_error = l2_err_norm(true=tke_true[eval_idx[time_lag:]], pred=tke_pred[time_lag:len(eval_idx)])
-        
-        # save metrics to paths_bib.pred_metrics_dir
-        with h5py.File(runner.paths_bib.pred_metrics_dir + 'tke.h5', 'w') as f:
-            f.create_dataset('tke_true', data=tke_true)
-            f.create_dataset('tke_pred', data=tke_pred)
-            f.create_dataset('error', data=tke_error)
+
+    with h5py.File(pred_path, 'r') as f:
+        tke_pred = f['tke_pred'][:]
+
+    with h5py.File(true_path, 'r') as f:
+        tke_true = f[runner.paths_bib.latent_id + '_tke_true'][:]
+
+    # TKE error
+    tke_error = l2_err_norm(true=tke_true[eval_idx[time_lag:]], pred=tke_pred[time_lag:len(eval_idx)])
 
     print(f"TKE error: {100*tke_error:.3f}%")
     t = idx / 100
@@ -186,7 +153,7 @@ def plot_tke(runner, truth, pred, idx, eval_idx, true_idx):
 
     size = 0.6
     plt.figure(figsize=(size*width,size*height))
-    plt.plot(t_true, tke_true, label='True TKE', color='k', linestyle='-')
+    plt.plot(t_true, tke_true[true_idx], label='True TKE', color='k', linestyle='-')
     plt.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='-.')
     plt.xlabel('Nondimensional time')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
@@ -208,7 +175,7 @@ def plot_tke(runner, truth, pred, idx, eval_idx, true_idx):
     
 
     # psd of TKE
-    f, Pxx_true = welch(tke_true, fs=100)
+    f, Pxx_true = welch(tke_true[eval_idx[time_lag:]], fs=100)
     f, Pxx_pred = welch(tke_pred[time_lag:], fs=100)
     plt.figure(figsize=(size*width,size*height))
     plt.loglog(f, Pxx_true, label='True TKE', color='k', linestyle='-')
@@ -233,7 +200,6 @@ def plot_tke(runner, truth, pred, idx, eval_idx, true_idx):
 
 
 def plot_PSDs(runner, data_dict):
-
     psd_results = {}
     time_lag = runner.config['params']['time_lag']
     # Loop through data types (ground truth and prediction) and points
@@ -356,7 +322,6 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     time_lag = runner.config['params']['time_lag']
     size = 1
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
-    
     if len(eval_idx) == len(true_idx):
         eval_idx = range(len(true_idx))
     # Compute Coherence for U and V component point 1
@@ -466,12 +431,12 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     time_lag = runner.config['params']['time_lag']
     size = 0.75
     fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2), sharex=True, sharey=True)
-
-    if len(eval_idx) == len(true_idx):
-        eval_idx = range(len(true_idx))
     
     t = idx / 100  # Convert to nondimensional time
     t_true = np.array(true_idx) / 100
+
+    if len(eval_idx) == len(true_idx):
+        eval_idx = range(len(true_idx))
 
     # Plotting the data for Point 1
     axs[0,0].plot(t_true, data_dict['truth']['p1'][:,0], label='True', color='k', linestyle='-')
@@ -589,8 +554,15 @@ def animate(runner):
     """
     import imageio
 
+    plt.rcParams['font.size'] = 20 # Change default font size to 12
+    plt.rcParams['axes.titlesize'] = 28 # Change axes title font size
+    plt.rcParams['axes.labelsize'] = 20 # Change axes labels font size
+    plt.rcParams['xtick.labelsize'] = 20 # Change x-axis tick labels font size
+    plt.rcParams['ytick.labelsize'] = 20 # Change y-axis tick labels font size
+    plt.rcParams['legend.fontsize'] = 20 # Change legend font size
+
     time_lag = runner.config['params']['time_lag']
-    time_lim = 1500
+    time_lim = 1000000
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
@@ -628,7 +600,7 @@ def animate(runner):
             for i, id in enumerate(idx):  # Number of frames
                 if i % 50 == 0:
                     print(f'Processing frame {i+1}/{len(idx)}')
-                fig, axs = plt.subplots(2,3, figsize=(8,5.5))
+                fig, axs = plt.subplots(2,3, figsize=(16,11))
                 axs[0, 0].imshow(Q_plot[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[0, 0].set_title('True $u$')
 
@@ -682,7 +654,13 @@ def animate(runner):
             # imageio.mimsave(runner.paths_bib.anim_dir + pred_name + '.gif', frames, fps=30, loop=0)
 
             # save as mp4
-            writer = imageio.get_writer(runner.paths_bib.anim_dir + pred_name + '.mp4', fps=30)
+            writer = imageio.get_writer(
+                runner.paths_bib.anim_dir + pred_name + '.mp4',
+                fps=30,
+                codec='libx264',  # Use H.264 codec for better quality control
+                quality=8,        # 0 (lowest) to 10 (highest), default is 5
+                ffmpeg_params=['-crf', '18']  # Lower CRF = higher quality (default 23, range 0–51)
+            )
             for frame in frames:
                 writer.append_data(frame)
             writer.close()

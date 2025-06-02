@@ -90,3 +90,7 @@ def normalize_data(data, mean, std):
     return (data - mean) / std
 def denormalize_data(data, mean, std):
     return (data * std) + mean
+
+
+
+        

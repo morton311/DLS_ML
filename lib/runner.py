@@ -601,7 +601,7 @@ class runner(nn.Module):
                     f.create_dataset('idx', data=idx)
                 
 
-    def eval(self):
+    def eval_old(self):
         """
         Evaluate the model
         """
@@ -720,5 +720,268 @@ class runner(nn.Module):
                 print('Point data plot done')
                 plots.attention_maps(self)
                 print('Attention map plot done\n\n')
+
+
+    def eval(self):
+        """
+        Evaluate the model
+        """
+        import lib.plotting as plots
+        print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
+        
+        nx = self.l_config.nx
+        ny = self.l_config.ny
+        nx_t = self.l_config.nx_t
+        ny_t = self.l_config.ny_t
+
+        # point probe info
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        x = x[:nx_t]
+        y = y[:ny_t]
+        X, Y = np.meshgrid(x, y)
+
+        # find y closest  = 0.112
+        y_closest = np.argmin(np.abs(y - 0.112))
+        # print('y_closest: ', y[y_closest])
+
+        # find x closest to 0.233 and 0.765
+        x_closest1 = np.argmin(np.abs(x - 0.233))
+        x_closest2 = np.argmin(np.abs(x - 0.765))
+        # print('x_closest1: ', x[x_closest1])
+        # print('x_closest2: ', x[x_closest2])
+
+        point_1 = (x[x_closest1], y[y_closest])
+        point_2 = (x[x_closest2], y[y_closest])
+        point_1_idx = (x_closest1, y_closest)
+        point_2_idx = (x_closest2, y_closest)
+        
+        time_lag = self.config['params']['time_lag']
+        true_path = self.paths_bib.data_path
+        self.compute_TKE_true(true_path)
+
+        # Load the predictions
+        for pred_file in os.listdir(self.paths_bib.predictions_dir):
+            if pred_file.endswith('.h5') and 'rec' in pred_file and any(key in pred_file for key in self.config['predictions'].keys()):
+                print(f"Loading predictions from {pred_file}")
+                pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
+                self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.fig_dir, pred_name + '/')
+                self.paths_bib.pred_metrics_dir = os.path.join(self.paths_bib.metrics_dir, pred_name + '/')
+                
+                os.makedirs(self.paths_bib.pred_fig_dir, exist_ok=True)
+                os.makedirs(self.paths_bib.pred_metrics_dir, exist_ok=True)
+
+                pred_path = os.path.join(self.paths_bib.predictions_dir, pred_file)
+                
+                with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
+                    len_pred = f['Q_rec'].shape[0]
+                    idx = f['idx'][:]
+                    uv_rec_p1 = f['Q_rec'][:len_pred, point_1_idx[0], point_1_idx[1], :]
+                    uv_rec_p2 = f['Q_rec'][:len_pred, point_2_idx[0], point_2_idx[1], :]
+
+                with h5py.File(self.paths_bib.data_path, 'r') as f:
+                    num_snaps = f['UV'].shape[0]
+                    if idx[0] + time_lag + len_pred > num_snaps:
+                        print(f"error metrics will be limited to t={idx[0]/100} to t={(num_snaps)/100}")
+                        eval_len = num_snaps - idx[0]
+                        eval_idx = idx[:eval_len]
+                    else:
+                        eval_len = len_pred
+                        eval_idx = idx
+
+                    if self.config['predictions'][pred_name].get('arg', '') == 'extrap':
+                        true_idx = list(range(max(0, idx[0] - int(1*len_pred)), min(num_snaps, idx[0] + eval_len)))
+                    else:
+                        true_idx = eval_idx
+
+                    mean_uv_p1 = f['mean'][point_1_idx[0], point_1_idx[1], :]
+                    mean_uv_p2 = f['mean'][point_2_idx[0], point_2_idx[1], :]
+                    uv_p1 = f['UV'][true_idx, point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
+                    uv_p2 = f['UV'][true_idx, point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
+
+                point_dict = {
+                    "truth": {
+                        "p1": uv_p1,
+                        "p2": uv_p2
+                    },
+                    "pred": {
+                        "p1": uv_rec_p1,
+                        "p2": uv_rec_p2
+                    }
+                }
+
+                self.compute_TKE(pred_path)
+                self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
+
+                # plot losses, RMS, TKE, Coherence
+                print(f'\nGenerating plots, saving')
+                plots.plot_loss(self)
+                print('Loss plot done')
+                plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
+                print('RMS plot done\n')
+                plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                print('TKE plot done')
+                plots.plot_PSDs(self, point_dict)
+                print('PSD plot done')
+                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                print('Coherence plot done')
+                plots.plot_points(self)
+                print('Point plot done')
+                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                print('Point data plot done')
+                plots.attention_maps(self)
+                print('Attention map plot done\n\n')
+                
+    def compute_TKE(self, pred_path, batch_size=1000):
+        """
+        Compute the Turbulent Kinetic Energy (TKE) for predictions and respective ground truth data.
+        The TKE is calculated as the sum of the squares of the velocity components at each time. 
+        Data gets saved to predictions file as a field
+        
+        """
+        import numpy as np
+        import h5py
+
+        with h5py.File(pred_path, 'r+') as f_pred:
+            pred_shape = f_pred['Q_rec'].shape
+
+            num_batches = pred_shape[0] // batch_size
+            if pred_shape[0] % batch_size != 0:
+                num_batches += 1
+            tke_pred = np.zeros((pred_shape[0]), dtype=np.float32)
+            
+            if 'tke_pred' not in f_pred.keys() or any(x in self.config['overwrite'] for x in ['l', 'm', 'r']):
+                print(f"Computing TKE for predictions in {pred_path}")
+                
+                for i in range(num_batches):
+                    start_idx = i * batch_size
+                    end_idx = min((i + 1) * batch_size, pred_shape[0])
+                    if start_idx >= pred_shape[0]:
+                        break
+                    
+                    # Get the predictions for the current batch
+                    pred_batch = f_pred['Q_rec'][start_idx:end_idx]
+                    
+                    # Compute TKE for the current batch
+                    tke_batch = 1/2 * np.sum(pred_batch**2, axis=(1, 2, 3))
+                    tke_pred[start_idx:end_idx] = tke_batch
+                
+                # Save the TKE to the predictions file
+                if 'tke_pred' in f_pred.keys():
+                    del f_pred['tke_pred']
+                f_pred.create_dataset('tke_pred', data=tke_pred, dtype=np.float32)
+            
+        print(f"TKE computed and saved to pred_path in fields 'tke_pred'")
+
+
+    def compute_TKE_true(self, true_path, batch_size=1000):
+        import numpy as np
+        import h5py
+        with h5py.File(true_path, 'r+') as f_true:
+            true_shape = f_true['UV'].shape
+
+            num_batches = true_shape[0] // batch_size
+            if true_shape[0] % batch_size != 0:
+                num_batches += 1
+            tke_true = np.zeros((true_shape[0]), dtype=np.float32)
+
+            if self.paths_bib.latent_id + '_tke_true' not in f_true.keys():
+                mean = f_true['mean'][:self.l_config.nx_t, :self.l_config.ny_t]
+                print(f"Computing TKE for ground truth from {true_path}")
+                for i in range(num_batches):
+                    start_idx = i * batch_size
+                    end_idx = min((i + 1) * batch_size, true_shape[0])
+                    if start_idx >= true_shape[0]:
+                        break
+                    
+                    # Get the ground truth data for the current batch
+                    true_batch = f_true['UV'][start_idx:end_idx, :self.l_config.nx_t, :self.l_config.ny_t, :] - mean[np.newaxis, ...]
+                    
+                    # Compute TKE for the current batch
+                    tke_batch = 1/2 * np.sum(true_batch**2, axis=(1, 2, 3))
+                    tke_true[start_idx:end_idx] = tke_batch
+                    # Save the TKE to the predictions file
+                if self.paths_bib.latent_id + '_tke_true' in f_true.keys():
+                    del f_true[self.paths_bib.latent_id + '_tke_true']
+                f_true.create_dataset(self.paths_bib.latent_id + '_tke_true', data=tke_true, dtype=np.float32)
+        print(f"TKE computed and saved to true_path in fields '{self.paths_bib.latent_id + '_tke_true'}'")
+
+    def compute_RMS(self, true_path, pred_path, eval_idx, batch_size=1000):
+        """
+        Compute the RMS error for predictions and respective ground truth data.
+        The RMS error is calculated as the square root of the mean squared error at each time. 
+        Data gets saved to predictions file as a field
+        """
+        import numpy as np
+        import h5py
+
+        time_lag = self.config['params']['time_lag']
+
+        with h5py.File(pred_path, 'r+') as f_pred:
+            pred_shape = f_pred['Q_rec'].shape
+            
+            num_snaps = len(eval_idx) - time_lag
+
+            num_batches = len(eval_idx) // batch_size
+            if num_snaps % batch_size != 0:
+                num_batches += 1
+
+            rms_pred = np.zeros((pred_shape[1], pred_shape[2], pred_shape[3]), dtype=np.float32)
+
+            if 'rms_pred' not in f_pred.keys() or any(x in self.config['overwrite'] for x in ['l', 'm', 'r']):
+                print(f"\nComputing RMS for predictions in {pred_path}")
+                sum_squared_pred = np.zeros((pred_shape[1], pred_shape[2], pred_shape[3]), dtype=np.float32)
+                for i in range(num_batches):
+                    start_idx = time_lag + i * batch_size
+                    end_idx = min(time_lag + (i + 1) * batch_size, len(eval_idx))
+                    if start_idx >= pred_shape[0]:
+                        break
+                    
+                    # Get the predictions for the current batch
+                    pred_batch = f_pred['Q_rec'][start_idx:end_idx]
+                    # Compute sum of squares of batch
+                    sum_squared_pred += np.sum(pred_batch**2, axis=0)
+
+                # Compute RMS for predictions
+                rms_pred = np.sqrt(sum_squared_pred / (num_snaps))
+                rms_pred = rms_pred.transpose((2,0,1))  
+                # Save the RMS to the predictions file
+                if 'rms_pred' in f_pred.keys():
+                    del f_pred['rms_pred']
+                f_pred.create_dataset('rms_pred', data=rms_pred, dtype=np.float32)
+
+            with h5py.File(true_path, 'r+') as f_true:
+                true_shape = f_true['UV'].shape
                 
 
+                num_batches = (len(eval_idx) - time_lag) // batch_size
+                if num_snaps % batch_size != 0:
+                    num_batches += 1
+
+                rms_true =np.zeros((pred_shape[1], pred_shape[2], pred_shape[3]), dtype=np.float32)
+                if 'rms_true' not in f_pred.keys() or any(x in self.config['overwrite'] for x in ['l', 'm', 'r']):
+                    mean = f_true['mean'][:pred_shape[1], :pred_shape[2]]
+                    print(f"Computing RMS for ground truth from {true_path}")
+                    sum_squared_true = np.zeros((pred_shape[1], pred_shape[2], pred_shape[3]), dtype=np.float32)
+                    for i in range(num_batches):
+                        start_idx = eval_idx[0] + time_lag + i * batch_size
+                        end_idx = min(eval_idx[0] + time_lag + (i + 1) * batch_size, eval_idx[-1] )
+                        if start_idx >= true_shape[0]:
+                            print('Breaking out of loop, start_idx >= true_shape[0]')
+                            break
+
+                        
+                        # Get the ground truth data for the current batch
+                        true_batch = f_true['UV'][start_idx:end_idx, :pred_shape[1], :pred_shape[2], :] - mean[np.newaxis, ...]
+                        
+                        # Compute sum of squares of batch
+                        sum_squared_true += np.sum(true_batch**2, axis=0)
+
+                    # Compute RMS for ground truth
+                    rms_true = np.sqrt(sum_squared_true / (len(eval_idx) - time_lag))
+                    rms_true = rms_true.transpose((2,0,1))
+                    # Save the RMS to the predictions file
+                    if 'rms_true' in f_pred.keys():
+                        del f_pred['rms_true']
+                    f_pred.create_dataset('rms_true', data=rms_true, dtype=np.float32)
+        print(f"RMS computed and saved to pred_path in fields 'rms_pred' and 'rms_true'")
