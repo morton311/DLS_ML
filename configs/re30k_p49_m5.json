@@ -4,7 +4,7 @@
     "latent_type":      "dls",
 
     "latent_params": {
-        "patch_size":   19,
+        "patch_size":   49,
         "num_modes":    5
     },
 
@@ -18,19 +18,19 @@
     },
 
     "train": {
-        "train_split":  0.7,
+        "train_split":  0.02915,
         "test_split":   0.1,
-        "sample_train": 6000,
-        "sample_test":  600,
+        "sample_train": 0,
+        "sample_test":  0,
         "lr":           0.001,
         "num_epochs":   1000,
-        "patience":     10,
-        "train_ahead":  5,
+        "patience":     25,
+        "train_ahead":  1,
         "batch_size":   256
     },
 
     "pred_lim":         512,
-    
+
     "predictions": {
         "unseen": {
             "init":     "val",
@@ -43,6 +43,11 @@
         "seen": {
             "init":     "train",
             "lim":      20000
+        },
+        "long": {
+            "init":     "val",
+            "lim":      5000,
+            "arg":      "extrap"
         }
     }
 }

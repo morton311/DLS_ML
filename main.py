@@ -1,5 +1,6 @@
 # source /home/cmorton/Desktop/beta-Variational-autoencoders-and-transformers-for-reduced-order-modelling-of-fluid-flows/.venv/bin/activate
-# python -u main.py -c 're15k' -m 'pred'
+# sudo nvidia-smi -pl 250
+# python -u main.py -c 're30k_p49_m5' -m 'train'
 import argparse
 import os
 import shutil

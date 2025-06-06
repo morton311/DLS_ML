@@ -562,7 +562,7 @@ def animate(runner):
     plt.rcParams['legend.fontsize'] = 20 # Change legend font size
 
     time_lag = runner.config['params']['time_lag']
-    time_lim = 1000000
+    time_lim = 100000
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
@@ -578,8 +578,9 @@ def animate(runner):
                 if num_snaps > time_lim:
                     num_snaps = time_lim
 
-                pred = f['Q_rec'][time_lag:num_snaps:2]
-                idx = f['idx'][time_lag:num_snaps:2]
+                pred = f['Q_rec'][time_lag:num_snaps:10]
+                idx = f['idx'][time_lag:num_snaps:10]
+                tke_pred = f['tke_pred'][:num_snaps]
 
             print(f'Loading truth from {runner.paths_bib.data_path}')
             with h5py.File(runner.paths_bib.data_path, 'r') as f:
@@ -588,6 +589,7 @@ def animate(runner):
                 truth = np.zeros(pred.shape, dtype=np.float32)
                 for i in range(len(idx)):
                     truth[i] = f['UV'][min(idx[i],true_num_snaps-1), :nx_t, :ny_t, :] - mean
+                tke_true = f[runner.paths_bib.latent_id + '_tke_true'][idx[0]-time_lag:idx[0]-time_lag+num_snaps]
             
             # Root mean squared error normalized by range of truth
             error_plot = 100 * abs(truth - pred) / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
@@ -595,45 +597,42 @@ def animate(runner):
             Q_plot = truth / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
             Q_plot_pred = pred / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
 
-            num_overlap = (true_num_snaps - idx[0]) // 2
+            num_overlap = (true_num_snaps - idx[0]) // 10
             frames = []
             for i, id in enumerate(idx):  # Number of frames
-                if i % 50 == 0:
+                if i % 100 == 0:
                     print(f'Processing frame {i+1}/{len(idx)}')
-                fig, axs = plt.subplots(2,3, figsize=(16,11))
+                fig, axs = plt.subplots(3, 3, figsize=(16, 15), gridspec_kw={'height_ratios': [1, 1, 0.6]})
+
+                # Top two rows: velocity and error plots
                 axs[0, 0].imshow(Q_plot[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[0, 0].set_title('True $u$')
-
                 axs[1, 0].imshow(Q_plot[i, :, :, 1], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[1, 0].set_title('True $v$')
-
                 axs[0, 1].imshow(Q_plot_pred[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[0, 1].set_title('Predicted $u$')
-
                 axs[1, 1].imshow(Q_plot_pred[i, :, :, 1], cmap='seismic', origin='lower', vmin=-1, vmax=1)
                 axs[1, 1].set_title('Predicted $v$')
 
-                
                 im = axs[0, 2].imshow(error_plot[min(i, num_overlap), :, :, 0], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
-                
                 axs[0, 2].set_title('Error\% $u$')
                 axs[0, 2].set_aspect('equal')
                 divider = make_axes_locatable(axs[0, 2])
                 cax = divider.append_axes("right", size="5%", pad=0.05)
                 cbar = fig.colorbar(im, cax=cax, format='%.0f')
-                im.set_clim(vmin=0, vmax=100) # Set color limits for consistency
-
+                im.set_clim(vmin=0, vmax=100)
                 cbar.set_label('Error (\%)', rotation=270, labelpad=15)
+
                 im = axs[1, 2].imshow(error_plot[min(i, num_overlap), :, :, 1], cmap='RdBu_r', origin='lower', vmin=0, vmax=100)
                 axs[1, 2].set_title('Error\% $v$')
                 axs[1, 2].set_aspect('equal')
                 divider = make_axes_locatable(axs[1, 2])
                 cax = divider.append_axes("right", size="5%", pad=0.05)
                 cbar = fig.colorbar(im, cax=cax, format='%.0f')
-                im.set_clim(vmin=0, vmax=100) # Set color limits for consistency
+                im.set_clim(vmin=0, vmax=100)
                 cbar.set_label('Error (\%)', rotation=270, labelpad=15)
-                
-                for ax in axs.flat:
+
+                for ax in axs[:2, :].flat:
                     ax.set_xticks([])
                     ax.set_yticks([])
                     ax.set_xticklabels([])
@@ -641,8 +640,28 @@ def animate(runner):
                     for spine in ax.spines.values():
                         spine.set_edgecolor('black')
                         spine.set_linewidth(1.5)
+
+                t = (np.arange(idx[0], idx[0] + num_snaps)-time_lag) / 100  
+                # Bottom row: TKE plot spanning all columns
+                ax_tke = plt.subplot2grid((3, 3), (2, 0), colspan=3, fig=fig)
+                ax_tke.plot(t, tke_true, label='True TKE', color='k')
+                ax_tke.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='--')
+                ax_tke.axvline(id/100, color='b', linestyle=':', linewidth=2, label='Current Frame')
+                ax_tke.set_ylabel('TKE')
+                ax_tke.set_xlabel('Nondimensional time')
+                ax_tke.legend(
+                    ['True', 'Predicted'],
+                    loc='lower right',
+                    bbox_to_anchor=(1, 0.95),  # Adjust position to the right of the plot
+                    ncol=2,  # Spread horizontally
+                    frameon=False,  # Removes legend border,
+                    fontsize=20  # Adjust font size
+                )
+                ax_tke.set_title('True vs Predicted TKE')
+                ax_tke.grid(visible=True, linestyle='--', linewidth=0.5)
+
                 plt.tight_layout()
-                
+
                 # Save the current frame
                 fig.canvas.draw()
                 frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')

@@ -28,15 +28,80 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
+    
 
+
+
+## ===================================== TimeSpace Embed =========================================
+
+"""
+
+Create a new embedding strategy for time and space embedding
+
+@ yuningw
+
+"""
+
+class TimeSpaceEmbedding(nn.Module):
+    
+    """"
+
+    A embedding module based on both time and space
+    Args:
+
+    d_input : The input size of timedelay embedding
+
+    n_mode : The number of modes/dynamics in the time series 
+
+    d_expand : The projection along the time
+
+    d_model : The projection along the space 
+
+    """
+
+    def __init__(self, time_lag, input_dim,
+                d_expand, d_model):
+
+        super(TimeSpaceEmbedding, self).__init__()
+
+        self.spac_proj      = nn.Linear(input_dim,d_model)
+
+        self.time_proj      = nn.Conv1d(time_lag, d_expand,1)
+
+        self.time_avgpool   = nn.AvgPool1d(2)
+        self.time_maxpool   = nn.MaxPool1d(2)
+        self.time_compress  = nn.Linear(d_model, d_model)
+        self.act            = nn.Identity()
+
+        nn.init.xavier_uniform_(self.spac_proj.weight)
+        nn.init.xavier_uniform_(self.time_proj.weight)
+        nn.init.xavier_uniform_(self.time_compress.weight)
+    
+    def forward(self, x):
+        
+        # Along space projection
+        x       = self.spac_proj(x)
+        
+        # Along the time embedding 
+        x       = self.time_proj(x)
+        timeavg = self.time_avgpool(x)
+        timemax = self.time_maxpool(x)
+        tau     = torch.cat([timeavg, timemax],-1)
+        out     = self.act(self.time_compress(tau))
+        return out
 
 ## ====================================== Transformer ============================================
 # Define the Transformer Encoder model
 class TransformerEncoderModel(nn.Module):
-    def __init__(self, time_lag, input_dim, d_model=256, nhead=4, num_layers=4):
+    def __init__(self, time_lag, input_dim, d_model=256, nhead=4, num_layers=4, embed='lin'):
         super(TransformerEncoderModel, self).__init__()
-        self.input_projection = nn.Linear(input_dim, d_model)
-        self.positional_encoding = PositionalEncoding(d_model, max_len=time_lag)
+        if embed == 'TS':
+            self.positional_encoding = nn.Identity()
+            self.embed = TimeSpaceEmbedding(time_lag, input_dim, d_expand=2 * time_lag, d_model=d_model)
+        elif embed == 'lin':
+            self.positional_encoding = PositionalEncoding(d_model, max_len=time_lag)
+            self.embed = nn.Linear(input_dim, d_model)
+        
         self.encoder_layers = nn.ModuleList([
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True)
             for _ in range(num_layers)
@@ -73,7 +138,7 @@ class TransformerEncoderModel(nn.Module):
         return self.encoder_attn_outputs.copy()
 
     def forward(self, x):
-        x = self.input_projection(x)
+        x = self.embed(x)
         x = self.positional_encoding(x)
 
         for layer in self.encoder_layers:

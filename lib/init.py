@@ -17,6 +17,7 @@ class pathsBib:
         self.latent_path = self.latent_dir + 'latent_coeff.h5'
 
         self.model_id = config['model']
+        self.model_id += '_' + config['params']['embed']
         self.model_id += '_t' + str(config['params']['time_lag'])
         self.model_id += '_ta' + str(config['train']['train_ahead'])
         self.model_id += '_l' + str(config['params']['num_layers'])

@@ -162,7 +162,8 @@ class runner(nn.Module):
                     input_dim=self.config['params']['input_dim'],
                     d_model=self.config['params']['d_model'],
                     nhead=self.config['params']['nhead'],
-                    num_layers=self.config['params']['num_layers']
+                    num_layers=self.config['params']['num_layers'],
+                    embed=self.config['params']['embed']
                     ).to(self.device)
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
@@ -282,9 +283,9 @@ class runner(nn.Module):
         print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}, dtype: {X_test.dtype}")
 
         # convert to data loader
-        self.train_loader = datas.make_dataloader(X_train, Y_train, batch_size=self.config['train']['batch_size'], shuffle=True)
+        self.train_loader = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True)
         print(f"Train loader created with {len(self.train_loader)} batches")
-        self.test_loader = datas.make_dataloader(X_test, Y_test, batch_size=self.config['train']['batch_size'], shuffle=False)
+        self.test_loader = datas.make_dataloader(X_test.to(self.device), Y_test.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=False)
         print(f"Test loader created with {len(self.test_loader)} batches")
 
 
@@ -314,7 +315,7 @@ class runner(nn.Module):
 
             ## --------------------------------------- Train ---------------------------------------
             for inputs, targets in self.train_loader: 
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                inputs, targets = inputs, targets
                 self.optimizer.zero_grad()
                 total_loss = 0.0
 
@@ -345,7 +346,7 @@ class runner(nn.Module):
             test_loss = 0
             with torch.no_grad():
                 for inputs, targets in self.test_loader:
-                    inputs, targets = inputs.to(self.device), targets.to(self.device)
+                    inputs, targets = inputs, targets
                     for n in range(targets.shape[1]):
                         target = targets[:, n, :]
                         outputs = self.model(inputs)
@@ -601,134 +602,13 @@ class runner(nn.Module):
                     f.create_dataset('idx', data=idx)
                 
 
-    def eval_old(self):
-        """
-        Evaluate the model
-        """
-        import lib.plotting as plots
-        print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
-        
-        nx = self.l_config.nx
-        ny = self.l_config.ny
-        nx_t = self.l_config.nx_t
-        ny_t = self.l_config.ny_t
-
-        # point probe info
-        x = np.linspace(0, 1, nx)
-        y = np.linspace(0, 1, ny)
-        x = x[:nx_t]
-        y = y[:ny_t]
-        X, Y = np.meshgrid(x, y)
-
-        # find y closest  = 0.112
-        y_closest = np.argmin(np.abs(y - 0.112))
-        # print('y_closest: ', y[y_closest])
-
-        # find x closest to 0.233 and 0.765
-        x_closest1 = np.argmin(np.abs(x - 0.233))
-        x_closest2 = np.argmin(np.abs(x - 0.765))
-        # print('x_closest1: ', x[x_closest1])
-        # print('x_closest2: ', x[x_closest2])
-
-        point_1 = (x[x_closest1], y[y_closest])
-        point_2 = (x[x_closest2], y[y_closest])
-        point_1_idx = (x_closest1, y_closest)
-        point_2_idx = (x_closest2, y_closest)
-        
-        time_lag = self.config['params']['time_lag']
-
-        # load indices of validation set
-        # with open(self.paths_bib.model_dir + 'split_ids.pkl', 'rb') as f:
-        #     indices = pickle.load(f)
-        #     self.val_indices = indices['val_indices']
-
-        eval_lim = 5064
-
-        # Load the predictions
-        for pred_file in os.listdir(self.paths_bib.predictions_dir):
-            if pred_file.endswith('.h5') and 'rec' in pred_file and any(key in pred_file for key in self.config['predictions'].keys()):
-                print(f"Loading predictions from {pred_file}")
-                pred_name = pred_file.replace('rec_', '').replace('_pred.h5', '')
-                self.paths_bib.pred_fig_dir = os.path.join(self.paths_bib.fig_dir, pred_name + '/')
-                self.paths_bib.pred_metrics_dir = os.path.join(self.paths_bib.metrics_dir, pred_name + '/')
-                
-                os.makedirs(self.paths_bib.pred_fig_dir, exist_ok=True)
-                os.makedirs(self.paths_bib.pred_metrics_dir, exist_ok=True)
-
-                with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
-                    len_pred = f['Q_rec'].shape[0]
-                    if len_pred > eval_lim:
-                        print(f"Limiting predictions to {eval_lim} samples")
-                        len_pred = eval_lim
-                    pred = f['Q_rec'][:len_pred]
-                    uv_rec_p1 = pred[:len_pred, point_1_idx[0], point_1_idx[1], :]
-                    uv_rec_p2 = pred[:len_pred, point_2_idx[0], point_2_idx[1], :]
-                    idx = f['idx'][:len_pred]
-                
-                print(f'Loading truth from {self.paths_bib.data_path}')
-                with h5py.File(self.paths_bib.data_path, 'r') as f:
-                    num_snaps = f['UV'].shape[0]
-                    if idx[0] + time_lag + len_pred > num_snaps:
-                        print(f"error metrics will be limited to t={idx[0]/100} to t={(num_snaps)/100}")
-                        eval_len = num_snaps - idx[0]
-                        eval_idx = idx[:eval_len]
-                    else:
-                        eval_len = len_pred
-                        eval_idx = idx
-
-                    if idx[0] < 3000 and len_pred <= eval_lim and self.config['predictions'][pred_name].get('arg', '') == 'extrap':
-                        true_idx = list(range(0, min(num_snaps, idx[0] + eval_len)))
-                    else:
-                        true_idx = eval_idx
-                    mean = f['mean'][:nx_t, :ny_t]
-                    truth = f['UV'][true_idx, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
-                    mean_uv_p1 = f['mean'][point_1_idx[0], point_1_idx[1], :]
-                    mean_uv_p2 = f['mean'][point_2_idx[0], point_2_idx[1], :]
-                    uv_p1 = f['UV'][true_idx, point_1_idx[0], point_1_idx[1], :] - mean_uv_p1[np.newaxis, ...]
-                    uv_p2 = f['UV'][true_idx, point_2_idx[0], point_2_idx[1], :] - mean_uv_p2[np.newaxis, ...]
-
-                print(f"Truth shape: {truth.shape}, Pred shape: {pred.shape}")
-
-                print(eval_idx[0], eval_idx[-1])
-
-                point_dict = {
-                    "truth": {
-                        "p1": uv_p1,
-                        "p2": uv_p2
-                    },
-                    "pred": {
-                        "p1": uv_rec_p1,
-                        "p2": uv_rec_p2
-                    }
-                }
-
-                # plot losses, RMS, TKE, Coherence
-                print(f'\nGenerating plots, saving')
-                plots.plot_loss(self)
-                print('Loss plot done')
-                plots.plot_rms(self, truth=truth, pred=pred, eval_idx=eval_idx, true_idx=true_idx)
-                print('RMS plot done\n')
-                plots.plot_tke(self, truth=truth, pred=pred, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('TKE plot done')
-                plots.plot_PSDs(self, point_dict)
-                print('PSD plot done')
-                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                print('Coherence plot done')
-                plots.plot_points(self)
-                print('Point plot done')
-                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('Point data plot done')
-                plots.attention_maps(self)
-                print('Attention map plot done\n\n')
-
-
     def eval(self):
         """
         Evaluate the model
         """
         import lib.plotting as plots
         print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
-        
+        self.model.eval()
         nx = self.l_config.nx
         ny = self.l_config.ny
         nx_t = self.l_config.nx_t
@@ -791,6 +671,7 @@ class runner(nn.Module):
 
                     if self.config['predictions'][pred_name].get('arg', '') == 'extrap':
                         true_idx = list(range(max(0, idx[0] - int(1*len_pred)), min(num_snaps, idx[0] + eval_len)))
+                        eval_idx = eval_idx - true_idx[0] # adjust eval_idx to start from truth t=0
                     else:
                         true_idx = eval_idx
 
@@ -865,12 +746,14 @@ class runner(nn.Module):
                     # Compute TKE for the current batch
                     tke_batch = 1/2 * np.sum(pred_batch**2, axis=(1, 2, 3))
                     tke_pred[start_idx:end_idx] = tke_batch
+
+                    print(f"Computed TKE for batch {i+1}/{num_batches}, shape: {tke_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
                 
                 # Save the TKE to the predictions file
                 if 'tke_pred' in f_pred.keys():
                     del f_pred['tke_pred']
                 f_pred.create_dataset('tke_pred', data=tke_pred, dtype=np.float32)
-            
+
         print(f"TKE computed and saved to pred_path in fields 'tke_pred'")
 
 
@@ -900,6 +783,8 @@ class runner(nn.Module):
                     # Compute TKE for the current batch
                     tke_batch = 1/2 * np.sum(true_batch**2, axis=(1, 2, 3))
                     tke_true[start_idx:end_idx] = tke_batch
+
+                    print(f"Computed TKE for batch {i+1}/{num_batches}, shape: {tke_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
                     # Save the TKE to the predictions file
                 if self.paths_bib.latent_id + '_tke_true' in f_true.keys():
                     del f_true[self.paths_bib.latent_id + '_tke_true']

@@ -30,18 +30,10 @@
     },
 
     "predictions": {
-        "validation": {
-            "init":     "val",
-            "lim":      null
-        },
-        "seen": {
-            "init":     "train",
-            "lim":      null
-        },
         "long":
         {
             "init":     "val",
-            "lim":      5000,
+            "lim":      15000,
             "arg":      "extrap"
         }
     }

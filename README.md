@@ -1,16 +1,33 @@
 # DLS_ML_Polishing
 
-## Need to Plan
+## Research To-do's
+- [ ] Lit review writing
+- [ ] Formality of sampling efficacy
+- [ ] Find qualitative sim studies
 
-- `python -u main.py -c "<config_id>"` 
-- Model checkpointing system
-- Information passing between scripts
-  - intermediate steps should be saved to disk
-- Performance optimization for batching DLS compression
+## Coding To-do's
+
+- [x] `python -u main.py -c "<config_id>"` 
+- [x] Model checkpointing system
+- [x] Information passing between scripts
+  -  intermediate steps should be saved to disk
+- [ ] Performance optimization for batching DLS compression
   - surely there's some optimal batch size?
-- Support for same latent mode shapes for another data set
+- [ ] Latent evaluation scripts
+- [ ] Implement time stamp embedding
+- [ ] Support for same latent mode shapes for another data set
+- [ ] Implement spectograms of point probes
+- [ ] Implement PSD contour plots
+- [ ] Investigate phase portraits for points
+- [ ] GPU training logic
+  - If array RAM < VRAM available 
+    - dset.to(gpu)
+  - Else  
+    - dset.to(cpu)
+- [ ] Implement POD, LSTM comparisons
+- [ ] Rapid analysis implementations
 
-### Potential Cases on Script Run
+<!-- ### Potential Cases on Script Run
 
 - `python -u main.py -o 'latent'`
   - Will need to rerun all results for this latent
@@ -25,7 +42,7 @@
   - model.pth exists -> load model and eval as normal
   - model.pth does not exists
     - checkpoint.pth does not exist -> train fresh
-    - checkpoint.pth exists -> load checkpoint, train from checkpoint, eval as normal
+    - checkpoint.pth exists -> load checkpoint, train from checkpoint, eval as normal -->
 
 
 

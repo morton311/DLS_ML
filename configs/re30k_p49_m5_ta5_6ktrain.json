@@ -4,7 +4,7 @@
     "latent_type":      "dls",
 
     "latent_params": {
-        "patch_size":   19,
+        "patch_size":   49,
         "num_modes":    5
     },
 
@@ -30,19 +30,25 @@
     },
 
     "pred_lim":         512,
-    
+
     "predictions": {
         "unseen": {
             "init":     "val",
-            "lim":      512
+            "lim":      512,
+            "arg":      "extrap"
         },
         "validation": {
             "init":     "val",
-            "lim":      20000
+            "lim":      5000
         },
         "seen": {
             "init":     "train",
-            "lim":      20000
+            "lim":      5000
+        },
+        "long": {
+            "init":     "val",
+            "lim":      20000,
+            "arg":      "extrap"
         }
     }
 }
