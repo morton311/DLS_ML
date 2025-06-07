@@ -97,10 +97,10 @@ class TransformerEncoderModel(nn.Module):
         super(TransformerEncoderModel, self).__init__()
         if embed == 'TS':
             self.positional_encoding = nn.Identity()
-            self.embed = TimeSpaceEmbedding(time_lag, input_dim, d_expand=2 * time_lag, d_model=d_model)
+            self.input_projection = TimeSpaceEmbedding(time_lag, input_dim, d_expand=2 * time_lag, d_model=d_model)
         elif embed == 'lin':
             self.positional_encoding = PositionalEncoding(d_model, max_len=time_lag)
-            self.embed = nn.Linear(input_dim, d_model)
+            self.input_projection = nn.Linear(input_dim, d_model)
         
         self.encoder_layers = nn.ModuleList([
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True)
@@ -138,7 +138,7 @@ class TransformerEncoderModel(nn.Module):
         return self.encoder_attn_outputs.copy()
 
     def forward(self, x):
-        x = self.embed(x)
+        x = self.input_projection(x)
         x = self.positional_encoding(x)
 
         for layer in self.encoder_layers:

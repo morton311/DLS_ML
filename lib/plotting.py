@@ -1,3 +1,4 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 plt.rcParams['text.usetex'] = True
@@ -8,6 +9,7 @@ import h5py
 import torch
 from scipy.signal import welch, correlate, coherence, correlation_lags, csd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.ticker import FuncFormatter
 
 paper_width = 470 # pt
 width = paper_width / 72.27 # inches
@@ -495,12 +497,111 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     print(f"L2 error at Point 2: {100*l2_error_p2:.3f}%")
 
 
+def plot_spectrograms(runner, data_dict, idx, true_idx):
+    """
+    Plot the spectrograms of the point probes using scipy.signal.ShortTimeFFT.spectrogram.
+    Compares ground truth and predictions for both u and v components, with separate plots for each point.
+    """
+    from scipy.signal import spectrogram
+    size = 0.75
+    fs = 100  # Sampling frequency
+    time_lag = runner.config['params']['time_lag']
+    fmt = lambda x, pos: r'$10^{{{}}}$'.format(int(np.log10(x))) if x != 0 else '0'
+
+    for point in ['p1', 'p2']:
+        fig, axs = plt.subplots(2, 2, figsize=(size*width*2, size*width), sharex=True, sharey=True)
+        for i, comp in enumerate(['$u$', '$v$']):
+            # 0: u, 1: v
+            data_true = data_dict['truth'][point][:, i]
+            data_pred = data_dict['pred'][point][time_lag:, i]
+
+            # Compute spectrograms
+            f_true, t_true, Sxx_true = spectrogram(data_true, fs=fs)
+            f_pred, t_pred, Sxx_pred = spectrogram(data_pred, fs=fs)
+
+            # # Plot ground truth
+            # im0 = axs[i, 0].pcolormesh(t_true + true_idx[0]/100, f_true, 10 * np.log10(np.fmax(Sxx_true, 1e-12)), cmap='RdBu_r')
+            # axs[i, 0].set_title(f'True {comp} at {point}')
+            # axs[i, 0].set_ylabel('Nondimensional frequency')
+            # fig.colorbar(im0, ax=axs[i, 0], format='%.1f', label='dB')
+
+            # # Plot prediction
+            # # print(f"Shape of f_pred: {f_pred.shape}, Sxx_pred: {Sxx_pred.shape}")
+            # im1 = axs[i, 1].pcolormesh(t_pred + idx[time_lag]/100, f_pred, 10 * np.log10(np.fmax(Sxx_pred, 1e-12)), cmap='RdBu_r')
+            # axs[i, 1].set_title(f'Predicted {comp} at {point}')
+            # fig.colorbar(im1, ax=axs[i, 1], format='%.1f', label='dB')
+
+            # Plot ground truth (no dB, log color scale)
+            im0 = axs[i, 0].pcolormesh(
+                t_true + true_idx[0]/100, f_true, Sxx_true,
+                cmap='RdBu_r', shading='Gouraud',
+                norm=matplotlib.colors.LogNorm(vmin=np.fmax(Sxx_true, 1e-12).min(), vmax=Sxx_true.max())
+            )
+            axs[i, 0].set_title(f'True {comp} at {point}')
+            axs[i, 0].set_ylabel('Nondimensional frequency')
+            cbar0 = fig.colorbar(im0, ax=axs[i, 0], format=FuncFormatter(fmt), 
+                                 label='Power Spectral Density')
+
+            # Plot prediction (no dB, log color scale)
+            im1 = axs[i, 1].pcolormesh(
+                t_pred + idx[time_lag]/100, f_pred, Sxx_pred,
+                cmap='RdBu_r', shading='Gouraud',
+                norm=matplotlib.colors.LogNorm(vmin=np.fmax(Sxx_pred, 1e-12).min(), vmax=Sxx_pred.max())
+            )
+            axs[i, 1].set_title(f'Predicted {comp} at {point}')
+            cbar1 = fig.colorbar(im1, ax=axs[i, 1], format=FuncFormatter(fmt), label='Power Spectral Density')
+            
+
+        for ax in axs[-1, :]:
+            ax.set_xlabel('Nondimensional time')
+        plt.tight_layout()
+        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'spectrogram_{point}.png'), dpi=600)
+        plt.close()
+
+def plot_phase_portraits(runner, data_dict):
+    """
+    Plot phase portraits (u vs v) for points 1 and 2, comparing predictions and ground truth.
+    """
+    size = 0.75
+    for point in ['p1', 'p2']:
+        plt.figure(figsize=(size*width, size*width))
+        # Ground truth
+        plt.plot(
+            data_dict['truth'][point][:, 0],
+            data_dict['truth'][point][:, 1],
+            label='True',
+            color='k',
+            linestyle='-'
+        )
+        # Prediction
+        plt.plot(
+            data_dict['pred'][point][:, 0],
+            data_dict['pred'][point][:, 1],
+            label='Predicted',
+            color='r',
+            linestyle='-.'
+        )
+        plt.xlabel(f'$u_{{{point}}}$')
+        plt.ylabel(f'$v_{{{point}}}$')
+        plt.title(f'Phase Portrait at {point.upper()}')
+        plt.legend(
+            ['True', 'Predicted'],
+            loc='best',
+            frameon=False,
+            fontsize=8
+        )
+        plt.grid(visible=True, linestyle='--', linewidth=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'phase_portrait_{point}.png'), dpi=600)
+        plt.close()
+
 
 
 def attention_maps(runner):
     """
     Plot the attention maps for the predicted data.
     """
+    
     time_lag = runner.config['params']['time_lag']
     # get val_indices
     val_indices = runner.val_indices[:time_lag]
@@ -553,6 +654,7 @@ def animate(runner):
     Create an animation of the truth and predicted data.
     """
     import imageio
+
 
     plt.rcParams['font.size'] = 20 # Change default font size to 12
     plt.rcParams['axes.titlesize'] = 28 # Change axes title font size

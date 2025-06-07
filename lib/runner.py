@@ -185,12 +185,24 @@ class runner(nn.Module):
         print(f"Loss function: {self.criterion}")
         print(f"Optimizer: {self.optimizer}")
 
+        # Helper function to remap 'embed' keys to 'input_projection'
+        def remap_embed_keys(state_dict):
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith('embed'):
+                    new_k = k.replace('embed', 'input_projection', 1)
+                    new_state_dict[new_k] = v
+                else:
+                    new_state_dict[k] = v
+            return new_state_dict
+
         # if checkpoint file exists, model doesn't exist, and overwrite is not set to 'l' or 'm', load the checkpoint
         check_flag = os.path.exists(self.paths_bib.checkpoint_path)
         model_flag = os.path.exists(self.paths_bib.model_path)
         if check_flag and not model_flag and not self.config['overwrite'] in ['l', 'm']: 
             print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
             checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
+            checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epoch']
@@ -205,7 +217,9 @@ class runner(nn.Module):
         elif model_flag and not self.config['overwrite'] in ['l', 'm']:
             print(f"Model already exists at {self.paths_bib.model_path}. Skipping training.")
             print(f"Loading model weights from {self.paths_bib.model_path}")
-            self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
+            state_dict = torch.load(self.paths_bib.model_path, weights_only=True)
+            state_dict = remap_embed_keys(state_dict)
+            self.model.load_state_dict(state_dict)
             self.checkpointed = False
         else:
             print(f"Model does not exist at {self.paths_bib.model_path}. Training from scratch.")
@@ -691,27 +705,32 @@ class runner(nn.Module):
                     }
                 }
 
+                print('Loaded predictions and truth')
+
                 self.compute_TKE(pred_path)
                 self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
 
                 # plot losses, RMS, TKE, Coherence
-                print(f'\nGenerating plots, saving')
-                plots.plot_loss(self)
-                print('Loss plot done')
-                plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
-                print('RMS plot done\n')
-                plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('TKE plot done')
-                plots.plot_PSDs(self, point_dict)
-                print('PSD plot done')
-                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                print('Coherence plot done')
-                plots.plot_points(self)
-                print('Point plot done')
-                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('Point data plot done')
-                plots.attention_maps(self)
-                print('Attention map plot done\n\n')
+                # print(f'\nGenerating plots, saving')
+                # plots.plot_loss(self)
+                # print('Loss plot done')
+                # plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
+                # print('RMS plot done\n')
+                # plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                # print('TKE plot done')
+                # plots.plot_PSDs(self, point_dict)
+                # print('PSD plot done')
+                # plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                # print('Coherence plot done')
+                # plots.plot_points(self)
+                # print('Point plot done')
+                # plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                # print('Point data plot done')
+                # plots.attention_maps(self)
+                # print('Attention map plot done')
+                plots.plot_phase_portraits(self, point_dict)
+                # plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
+                # print('Spectrogram plot done\n\n')
                 
     def compute_TKE(self, pred_path, batch_size=1000):
         """
