@@ -17,7 +17,8 @@ builtins.print = print
 
 import lib.init as init
 import lib.dls as dls
-import lib.transformer as tr
+import lib.pod as pod
+import lib.models as models
 import lib.datas as datas
 
 
@@ -43,7 +44,7 @@ class runner(nn.Module):
 
         print(f'Using device: {self.device}')
         if is_init_path:
-            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=5)
+            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=4)
         return paths
 
 
@@ -78,25 +79,48 @@ class runner(nn.Module):
         with h5py.File(self.paths_bib.data_path, 'r') as f:
             num_snaps = f['UV'].shape[0]
 
-        latent_config = dls.gfem_2d_long(
-            data_path=self.paths_bib.data_path,
-            field_name='UV',
-            latent_file=self.paths_bib.latent_path,
-            patch_size=self.config['latent_params']['patch_size'],
-            num_modes=self.config['latent_params']['num_modes'],
-            batch_size=num_snaps // 20
-        )
+        if self.config['latent_type'] == 'dls':
+            latent_config = dls.gfem_2d_long(
+                data_path=self.paths_bib.data_path,
+                field_name='UV',
+                latent_file=self.paths_bib.latent_path,
+                patch_size=self.config['latent_params']['patch_size'],
+                num_modes=self.config['latent_params']['num_modes'],
+                batch_size=num_snaps // 20
+            )
 
-        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
-            pickle.dump(latent_config, f)
-        print("Latent coefficient config saved")
+            with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
+                pickle.dump(latent_config, f)
+            print("Latent coefficient config saved")
+
+        elif self.config['latent_type'] == 'pod':
+            with h5py.File(self.paths_bib.data_path, 'r') as f:
+                mean = f['mean'][:]
+                data = f['UV'][:2500:2] - mean[np.newaxis, ...]
+            modes, eigVal, latent_config = pod.pod_mode_find(data)
+
+            with h5py.File(self.paths_bib.latent_path, 'w') as f:
+                f.create_dataset('eigVal', data=eigVal)
+                f.create_dataset('modes', data=modes)
+
+            pod.pod_decomp(self.paths_bib.data_path, self.paths_bib.latent_path)
+                
+            with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
+                pickle.dump(latent_config, f)
+
+
 
 
     def _latent_split(self):
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            input_dim = 2 * f['dof_u'].shape[1]
+            if self.config['latent_type'] == 'dls':
+                input_dim = 2 * f['dof_u'].shape[1]
+                total_snaps = f['dof_u'].shape[0]
+            elif self.config['latent_type'] == 'pod':
+                total_snaps = f['dofs'].shape[0]
+                input_dim = self.config['latent_params']['num_modes'] 
             self.config['params']['input_dim'] = input_dim
-            total_snaps = f['dof_u'].shape[0]
+            
 
         self._split_indices(total_snaps)
 
@@ -157,14 +181,25 @@ class runner(nn.Module):
         """
         # Load the model
         print(f"{'#'*20}\t{'Loading model...':<20}\t{'#'*20}")
-        self.model = tr.TransformerEncoderModel(
-                    time_lag=self.config['params']['time_lag'],
-                    input_dim=self.config['params']['input_dim'],
-                    d_model=self.config['params']['d_model'],
-                    nhead=self.config['params']['nhead'],
-                    num_layers=self.config['params']['num_layers'],
-                    embed=self.config['params']['embed']
-                    ).to(self.device)
+        if self.config['model'] == 'tr_enc':
+            self.model = models.TransformerEncoderModel(
+                        time_lag=self.config['params']['time_lag'],
+                        input_dim=self.config['params']['input_dim'],
+                        d_model=self.config['params']['d_model'],
+                        nhead=self.config['params']['nhead'],
+                        num_layers=self.config['params']['num_layers'],
+                        embed=self.config['params'].get('embed', 'lin')
+                        ).to(self.device)
+        elif self.config['model'] == 'lstm':
+            self.model = models.LSTMModel(
+                        time_lag=self.config['params']['time_lag'],
+                        input_dim=self.config['params']['input_dim'],
+                        hidden_dim=self.config['params']['hidden_dim'],
+                        num_layers=self.config['params']['num_layers'],
+                        batch_size= self.config['train']['batch_size'],
+                        ).to(self.device)
+        else:
+            raise ValueError(f"Model {self.config['model']} not recognized. Please use 'tr_enc' or 'lstm'.")
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
@@ -211,7 +246,6 @@ class runner(nn.Module):
             self.early_stop_counter = checkpoint['early_stop_counter']
             print(f"Checkpoint loaded")
             self.checkpointed = True
-            self.config['mode'] = 'train'
 
         # if model exists and overwrite is not set to 'l' or 'm', load the model and skip training
         elif model_flag and not self.config['overwrite'] in ['l', 'm']:
@@ -224,7 +258,6 @@ class runner(nn.Module):
         else:
             print(f"Model does not exist at {self.paths_bib.model_path}. Training from scratch.")
             self.checkpointed = False
-            self.config['mode'] = 'train'
 
 
     def train(self):
@@ -242,20 +275,25 @@ class runner(nn.Module):
         Get training and test data as torch tensors, minimizing memory usage.
         """
         print('Getting training and test data')
+        tl = self.config['params']['time_lag']
+        ta = self.config['train']['train_ahead']
+        dof_dim = self.config['params']['input_dim']
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            dof_u = f['dof_u']
-            dof_v = f['dof_v']
+            if self.config['latent_type'] == 'dls':
+                dof_u = f['dof_u']
+                dof_v = f['dof_v']
+                # Compute mean and std using only the training indices, in chunks to save memory
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    u = torch.from_numpy(dof_u[idx:idx+1]).float()
+                    v = torch.from_numpy(dof_v[idx:idx+1]).float()
+                    dofs[i] = torch.cat((u, v), dim=1)
+            elif self.config['latent_type'] == 'pod':
+                dofs_not_scaled = f['dofs']
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
 
-            tl = self.config['params']['time_lag']
-            ta = self.config['train']['train_ahead']
-            dof_dim = self.config['params']['input_dim']
-
-            # Compute mean and std using only the training indices, in chunks to save memory
-            dofs = torch.zeros(len(self.train_indices), dof_dim)
-            for i, idx in enumerate(self.train_indices):
-                u = torch.from_numpy(dof_u[idx:idx+1]).float()
-                v = torch.from_numpy(dof_v[idx:idx+1]).float()
-                dofs[i] = torch.cat((u, v), dim=1)
             dof_mean = torch.mean(dofs, dim=0)
             dof_std = torch.std(dofs, dim=0)
 
@@ -266,17 +304,20 @@ class runner(nn.Module):
                 pickle.dump((dof_mean, dof_std), f)
 
             # Helper to get normalized dof sequence as torch tensor
-            def get_dof_seq(idx, length):
-                u = torch.from_numpy(dof_u[idx:idx+length]).float()
-                v = torch.from_numpy(dof_v[idx:idx+length]).float()
-                dof = torch.cat((u, v), dim=1)
+            def get_dof_seq(idx, length, latent_type='dls'):
+                if latent_type == 'dls':
+                    u = torch.from_numpy(dof_u[idx:idx+length]).float()
+                    v = torch.from_numpy(dof_v[idx:idx+length]).float()
+                    dof = torch.cat((u, v), dim=1)
+                elif latent_type == 'pod':
+                    dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
                 dof = (dof - dof_mean) / dof_std
                 return dof
 
             # Prepare lists for X/Y, then stack at the end
             X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
             for i, idx in enumerate(self.train_indices):
-                dof_seq = get_dof_seq(idx, tl + ta)
+                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
                 X_train[i] = dof_seq[:tl]
                 Y_train[i] = dof_seq[tl:tl+ta]
                 if i % 500 == 0:
@@ -285,7 +326,7 @@ class runner(nn.Module):
 
             X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
             for i, idx in enumerate(self.test_indices):
-                dof_seq = get_dof_seq(idx, tl + ta)
+                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
                 X_test[i] = dof_seq[:tl]
                 Y_test[i] = dof_seq[tl:tl+ta]
                 if i % 100 == 0:
@@ -426,49 +467,15 @@ class runner(nn.Module):
         print('\nTraining complete')
 
 
-    def pred_old(self):
-        print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
-        # get initial sequence
-        time_lag = self.config['params']['time_lag']
-        if 'pred_lim' in self.config.keys():
-            pred_lim = self.config['pred_lim']
-        else:
-            pred_lim = np.inf
-        with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            dof_u = f['dof_u'][self.val_indices[0]:self.val_indices[0] + time_lag]
-            dof_v = f['dof_v'][self.val_indices[0]:self.val_indices[0] + time_lag]
-        initial_input = np.concatenate((dof_u, dof_v), axis=1)
-
-        print(f"Initial input shape: {initial_input.shape}")
-
-        num_predictions = len(self.val_indices) - time_lag
-        if num_predictions > pred_lim:
-            num_predictions = pred_lim
-
-        # make predictions
-        val_pred = self._predict(initial_input, num_predictions = num_predictions)
-        
-        # split and save predictions
-        pred_dof_u = val_pred[:, :self.config['params']['input_dim'] // 2]
-        pred_dof_v = val_pred[:, self.config['params']['input_dim'] // 2:]
-
-        print('Saving predictions to file')
-        with h5py.File(self.paths_bib.predictions_dir + 'val_pred.h5', 'w') as f:
-            f.create_dataset('dof_u', data=pred_dof_u)
-            f.create_dataset('dof_v', data=pred_dof_v)
-
-        print(f"Predictions saved to {self.paths_bib.predictions_dir + 'val_pred.h5'}")
-
-        # reconstruct the predictions
-        print(f"Reconstructing predictions")
-        self._pred_rec()
-
     def pred(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
 
         time_lag = self.config['params']['time_lag']
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            num_snaps = f['dof_u'].shape[0]
+            if self.config['latent_type'] == 'dls':
+                num_snaps = f['dof_u'].shape[0]
+            elif self.config['latent_type'] == 'pod':
+                num_snaps = f['dofs'].shape[0]
 
         for pred_name in self.config['predictions'].keys():
             print(f"Predicting for {pred_name}")
@@ -495,23 +502,32 @@ class runner(nn.Module):
 
             # get initial sequence
             with h5py.File(self.paths_bib.latent_path, 'r') as f:
-                dof_u = f['dof_u'][idx]
-                dof_v = f['dof_v'][idx]
-            initial_input = np.concatenate((dof_u, dof_v), axis=1)
+                if self.config['latent_type'] == 'dls':
+                    dof_u = f['dof_u'][idx]
+                    dof_v = f['dof_v'][idx]
+                    initial_input = np.concatenate((dof_u, dof_v), axis=1)
+                elif self.config['latent_type'] == 'pod':
+                    initial_input = f['dofs'][idx, :self.config['latent_params']['num_modes'] ]
             # print(f"Initial input shape: {initial_input.shape}")
 
             # make predictions
             pred = self._predict(initial_input, num_predictions=num_predictions)
         
             # split and save predictions
-            pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
-            pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
-
             print(f"Saving predictions to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
-            with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
-                f.create_dataset('dof_u', data=pred_dof_u)
-                f.create_dataset('dof_v', data=pred_dof_v)
-                f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
+            if self.config['latent_type'] == 'dls':
+                pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
+                pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
+
+                with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                    f.create_dataset('dof_u', data=pred_dof_u)
+                    f.create_dataset('dof_v', data=pred_dof_v)
+                    f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
+            elif self.config['latent_type'] == 'pod':
+                
+                with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                    f.create_dataset('dofs', data=pred)
+                    f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
 
             print(f"Saved!\n")
 
@@ -596,24 +612,44 @@ class runner(nn.Module):
                 print(f"Reconstructing predictions from {pred_file}")
                 rec_path = os.path.join(self.paths_bib.predictions_dir, 'rec_' + pred_file)
                 pred_path = os.path.join(self.paths_bib.predictions_dir, pred_file)
-                with h5py.File(pred_path, 'r') as f:
-                    pred_dof_u = f['dof_u'][:]
-                    pred_dof_v = f['dof_v'][:]
-                    idx = f['idx'][:]
 
-                # Load the latent config
-                with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
-                    latent_config = pickle.load(f)
+                if self.config['latent_type'] == 'dls':
+                    with h5py.File(pred_path, 'r') as f:
+                        pred_dof_u = f['dof_u'][:]
+                        pred_dof_v = f['dof_v'][:]
+                        idx = f['idx'][:]
 
-                dls.gfem_recon_long(config=latent_config,
-                                    rec_path=rec_path,
-                                    dof_u=pred_dof_u.T,
-                                    dof_v=pred_dof_v.T,
-                                    batch_size=1000)
-                
-                # copy idx field from original file to rec file
-                with h5py.File(rec_path, 'a') as f:
-                    f.create_dataset('idx', data=idx)
+                    # Load the latent config
+                    with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+                        latent_config = pickle.load(f)
+
+                    dls.gfem_recon_long(config=latent_config,
+                                        rec_path=rec_path,
+                                        dof_u=pred_dof_u.T,
+                                        dof_v=pred_dof_v.T,
+                                        batch_size=1000)
+                    
+                    # copy idx field from original file to rec file
+                    with h5py.File(rec_path, 'a') as f:
+                        f.create_dataset('idx', data=idx)
+                elif self.config['latent_type'] == 'pod':
+                    with h5py.File(pred_path, 'r') as f:
+                        pred_dofs = f['dofs'][:]
+                        idx = f['idx'][:]
+
+                    # Load the latent config
+                    with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+                        latent_config = pickle.load(f)
+
+                    pod.pod_recon_long(config=latent_config,
+                                       dofs=pred_dofs,
+                                       rec_path=rec_path,
+                                       latent_path=self.paths_bib.latent_path,
+                                       batch_size=1000)
+                    
+                    # copy idx field from original file to rec file
+                    with h5py.File(rec_path, 'a') as f:
+                        f.create_dataset('idx', data=idx)
                 
 
     def eval(self):
@@ -711,26 +747,27 @@ class runner(nn.Module):
                 self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
 
                 # plot losses, RMS, TKE, Coherence
-                # print(f'\nGenerating plots, saving')
-                # plots.plot_loss(self)
-                # print('Loss plot done')
-                # plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
-                # print('RMS plot done\n')
-                # plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                # print('TKE plot done')
-                # plots.plot_PSDs(self, point_dict)
-                # print('PSD plot done')
-                # plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                # print('Coherence plot done')
-                # plots.plot_points(self)
-                # print('Point plot done')
-                # plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                # print('Point data plot done')
-                # plots.attention_maps(self)
-                # print('Attention map plot done')
+                print(f'\nGenerating plots, saving')
+                plots.plot_loss(self)
+                print('Loss plot done')
+                plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
+                print('RMS plot done\n')
+                plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                print('TKE plot done')
+                plots.plot_PSDs(self, point_dict)
+                print('PSD plot done')
+                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                print('Coherence plot done')
+                plots.plot_points(self)
+                print('Point plot done')
+                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                print('Point data plot done')
+                if self.config['model'] == 'tr_enc':
+                    plots.attention_maps(self)
+                    print('Attention map plot done')
                 plots.plot_phase_portraits(self, point_dict)
-                # plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
-                # print('Spectrogram plot done\n\n')
+                plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
+                print('Spectrogram plot done\n\n')
                 
     def compute_TKE(self, pred_path, batch_size=1000):
         """

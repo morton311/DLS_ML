@@ -146,6 +146,39 @@ class TransformerEncoderModel(nn.Module):
             
         x = self.fc(x[:, -1, :])
         return x
+    
+
+## ====================================== LSTM Model ============================================
+class LSTMModel(nn.Module):
+    def __init__(self, time_lag, input_dim, hidden_dim=256, num_layers=2, batch_size = 256):
+        super(LSTMModel, self).__init__()
+        self.num_layers = num_layers
+        self.batch_size = batch_size
+
+        self.input_projection = nn.Linear(input_dim, hidden_dim)
+        self.positional_encoding = PositionalEncoding(hidden_dim, max_len=time_lag)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, input_dim)
+
+    def forward(self, x):
+        x = self.input_projection(x)
+        x = self.positional_encoding(x)
+        # Initialize hidden and cell states
+        hidden, cell = self.init_hidden(x.shape[0], x.device)
+        lstm_out, _ = self.lstm(x, (hidden.detach(), cell.detach()))
+        out = self.fc(lstm_out[:, -1, :])
+        return out
+    
+    def init_hidden(self,batch_size,device):
+        hidden = torch.zeros(self.num_layer,
+                                batch_size,
+                                self.hidden_size).to(device)
+                    
+        cell  =  torch.zeros(self.num_layer,
+                                batch_size,
+                                self.hidden_size).to(device) 
+                    
+        return hidden, cell
 
 
 ## ====================================== Train Model ============================================

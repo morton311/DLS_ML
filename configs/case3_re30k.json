@@ -4,7 +4,7 @@
     "latent_type":      "dls",
 
     "latent_params": {
-        "patch_size":   49,
+        "patch_size":   19,
         "num_modes":    5
     },
 
@@ -14,7 +14,8 @@
         "time_lag":     64,
         "d_model":      512,
         "nhead":        4,
-        "num_layers":   4
+        "num_layers":   4,
+        "embed":        "lin"
     },
 
     "train": {
@@ -30,25 +31,19 @@
     },
 
     "pred_lim":         512,
-
+    
     "predictions": {
         "unseen": {
             "init":     "val",
-            "lim":      512,
-            "arg":      "extrap"
+            "lim":      512
         },
         "validation": {
             "init":     "val",
-            "lim":      5000
+            "lim":      20000
         },
         "seen": {
             "init":     "train",
-            "lim":      5000
-        },
-        "long": {
-            "init":     "val",
-            "lim":      20000,
-            "arg":      "extrap"
+            "lim":      20000
         }
     }
 }

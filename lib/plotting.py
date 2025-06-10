@@ -562,33 +562,36 @@ def plot_phase_portraits(runner, data_dict):
     """
     Plot phase portraits (u vs v) for points 1 and 2, comparing predictions and ground truth.
     """
-    size = 0.75
+    time_lag = runner.config['params']['time_lag']
+    size = 0.6
     for point in ['p1', 'p2']:
         plt.figure(figsize=(size*width, size*width))
         # Ground truth
         plt.plot(
-            data_dict['truth'][point][:, 0],
-            data_dict['truth'][point][:, 1],
+            data_dict['truth'][point][time_lag:, 0],
+            data_dict['truth'][point][time_lag:, 1],
             label='True',
             color='k',
             linestyle='-'
         )
         # Prediction
         plt.plot(
-            data_dict['pred'][point][:, 0],
-            data_dict['pred'][point][:, 1],
+            data_dict['pred'][point][time_lag:, 0],
+            data_dict['pred'][point][time_lag:, 1],
             label='Predicted',
             color='r',
             linestyle='-.'
         )
         plt.xlabel(f'$u_{{{point}}}$')
         plt.ylabel(f'$v_{{{point}}}$')
-        plt.title(f'Phase Portrait at {point.upper()}')
+        plt.title(f'Phase Portrait at {point.upper()}', pad=16)
         plt.legend(
             ['True', 'Predicted'],
-            loc='best',
-            frameon=False,
-            fontsize=8
+            loc='lower right',
+            bbox_to_anchor=(1.03, 0.985),  # Adjust position to the right of the plot
+            ncol=2,  # Spread horizontally
+            frameon=False,  # Removes legend border,
+            fontsize=8  # Adjust font size
         )
         plt.grid(visible=True, linestyle='--', linewidth=0.5)
         plt.tight_layout()
@@ -607,10 +610,14 @@ def attention_maps(runner):
     val_indices = runner.val_indices[:time_lag]
     # load dof_u and dof_v
     with h5py.File(runner.paths_bib.latent_path, 'r') as f:
-        dof_u = f['dof_u'][val_indices]
-        dof_v = f['dof_v'][val_indices]
+        if runner.config['latent_type'] == 'dls':
+            dof_u = f['dof_u'][val_indices]
+            dof_v = f['dof_v'][val_indices]
 
-        initial_input = np.concatenate((dof_u, dof_v), axis=1)
+            initial_input = np.concatenate((dof_u, dof_v), axis=1)
+        elif runner.config['latent_type'] == 'pod':
+            initial_input = f['dofs'][val_indices, :runner.config['latent_params']['num_modes']]
+
         with open(os.path.join(runner.paths_bib.model_dir, 'dof_scaler.pkl'), 'rb') as f:
             dof_mean, dof_std = pickle.load(f)
         if dof_mean.dtype == torch.float32:

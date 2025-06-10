@@ -1,10 +1,10 @@
 {
-    "data_name":        "ldc_15k",
+    "data_name":        "ldc_30k_60ksnaps",
 
     "latent_type":      "dls",
 
     "latent_params": {
-        "patch_size":   19,
+        "patch_size":   49,
         "num_modes":    5
     },
 
@@ -19,7 +19,7 @@
     },
 
     "train": {
-        "train_split":  0.7,
+        "train_split":  0.02915,
         "test_split":   0.1,
         "sample_train": 0,
         "sample_test":  0,
@@ -30,11 +30,24 @@
         "batch_size":   256
     },
 
+    "pred_lim":         512,
+
     "predictions": {
-        "long":
-        {
+        "unseen": {
             "init":     "val",
-            "lim":      15000,
+            "lim":      512
+        },
+        "validation": {
+            "init":     "val",
+            "lim":      20000
+        },
+        "seen": {
+            "init":     "train",
+            "lim":      20000
+        },
+        "long": {
+            "init":     "val",
+            "lim":      5000,
             "arg":      "extrap"
         }
     }

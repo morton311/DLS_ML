@@ -16,9 +16,9 @@
 - [ ] Latent evaluation scripts
 - [ ] Implement time stamp embedding
 - [ ] Support for same latent mode shapes for another data set
-- [ ] Implement spectograms of point probes
+- [x] Implement spectograms of point probes
 - [ ] Implement PSD contour plots
-- [ ] Investigate phase portraits for points
+- [x] Investigate phase portraits for points
 - [ ] GPU training logic
   - If array RAM < VRAM available 
     - dset.to(gpu)
@@ -26,6 +26,8 @@
     - dset.to(cpu)
 - [ ] Implement POD, LSTM comparisons
 - [ ] Rapid analysis implementations
+- [ ] Change model folder naming scheme to be more readable
+  - potential answer in better config naming scheme
 
 <!-- ### Potential Cases on Script Run
 

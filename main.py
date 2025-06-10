@@ -1,6 +1,7 @@
 # source /home/cmorton/Desktop/beta-Variational-autoencoders-and-transformers-for-reduced-order-modelling-of-fluid-flows/.venv/bin/activate
 # sudo nvidia-smi -pl 250
 # python -u main.py -c 're30k_p49_m5' -m 'train'
+# python -u main.py -c 'pod_case3_re30k' -m 'test'
 import argparse
 import os
 import shutil
@@ -35,7 +36,8 @@ if __name__ == "__main__":
         config = json.load(f)
         
     config['overwrite'] = args.o
-    config['mode'] = args.m
+    config['mode'] = args.m 
+    config['name'] = os.path.basename(args.c).replace('.json', '')
 
     device = ('cuda' if torch.cuda.is_available() else "cpu")
     config['device'] = device
