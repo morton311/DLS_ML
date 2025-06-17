@@ -375,6 +375,7 @@ class runner(nn.Module):
                 total_loss = 0.0
 
                 for n in range(targets.shape[1]):
+                    # print(f"Step {n+1}/{targets.shape[1]}, VRAM usage: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
                     target = targets[:, n, :]  # shape: [B, input_dim]
 
                     # Forward pass

@@ -14,6 +14,7 @@
 - [ ] Performance optimization for batching DLS compression
   - surely there's some optimal batch size?
 - [ ] Latent evaluation scripts
+  - Comparison of all latent spaces, their energies, reconstruction errors, etc
 - [ ] Implement time stamp embedding
 - [ ] Support for same latent mode shapes for another data set
 - [x] Implement spectograms of point probes

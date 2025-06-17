@@ -14,7 +14,7 @@
 # python -u main.py -c 're30k_p49_m5' -m 'eval'
 # python -u main.py -c 're30k_p49_m5' -m 'anim'
 
-python -u main.py -c 're30k_TS_p49_m5_ta5_6ktrain_unsampled' -m 'train'
-python -u main.py -c 're30k_TS_p49_m5_ta5_6ktrain_unsampled' -m 'pred'
-python -u main.py -c 're30k_TS_p49_m5_ta5_6ktrain_unsampled' -m 'eval'
-python -u main.py -c 're30k_TS_p49_m5_ta5_6ktrain_unsampled' -m 'anim'
+python -u main.py -c 'new_train' -m 'train'
+python -u main.py -c 'new_train' -m 'pred'
+python -u main.py -c 'new_train' -m 'eval'
+python -u main.py -c 'new_train' -m 'anim'

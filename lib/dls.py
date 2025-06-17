@@ -525,18 +525,35 @@ def latent_eval(runner):
     import math
     from lib.plotting import l2_err_norm, curl
     # pull the latent space from h5 file
-    eval_length_max = 2499
+    eval_length_max = 2500
     with h5py.File(runner.paths_bib.latent_path, 'r') as f:
-        latent_length = f['dof_u'].shape[0]
-        if latent_length > eval_length_max:
-            latent_length = eval_length_max
-        dof_u = f['dof_u'][:latent_length].T
-        dof_v = f['dof_v'][:latent_length].T
+        if runner.config['latent_type'] == 'dls':
+            latent_length = f['dof_u'].shape[0]
+            print('latent length:', latent_length)
+            if latent_length > eval_length_max:
+                latent_length = eval_length_max
+            dof_u = f['dof_u'][:latent_length]
+            dof_v = f['dof_v'][:latent_length]
+            print('dof_u shape:', dof_u.shape)
+            print('dof_v shape:', dof_v.shape)
+            # reconstruct the data using the gfem_recon function
+            print('Reconstructing data...')
+            Q_rec = gfem_recon(dof_u=dof_u.T, dof_v=dof_v.T, config=runner.l_config)
+            print('Data shape:', Q_rec.shape)
+            print('Data reconstructed.')
+        elif runner.config['latent_type'] == 'pod':
+            latent_length = f['dofs'].shape[0]
+            if latent_length > eval_length_max:
+                latent_length = eval_length_max
+            dofs = f['dofs'][:latent_length, :runner.config['latent_params']['num_modes']]
+            modes = f['modes'][:, :runner.config['latent_params']['num_modes']]
+            # reconstruct the data using modes dot dofs
+            print('Reconstructing data...')
+            Q_rec = np.dot(dofs, modes.T).reshape((latent_length, runner.l_config.nx_t, runner.l_config.ny_t, 2))
+            print('Data shape:', Q_rec.shape)
+            print('Data reconstructed.')
 
-    # reconstruct the data using the gfem_recon function
-    print('Reconstructing data...')
-    Q_rec = gfem_recon(dof_u=dof_u, dof_v=dof_v, config=runner.l_config)
-    print('Data reconstructed.')
+    
 
     nx = runner.l_config.nx
     ny = runner.l_config.ny
@@ -549,32 +566,40 @@ def latent_eval(runner):
     x = x[:nx_t]
     y = y[:ny_t]
 
+    X, Y = np.meshgrid(x, y)
+
     # load the ground truth data
+    print('Loading ground truth data...')
     with h5py.File(runner.paths_bib.data_path, 'r') as f:
         mean = f['mean'][:nx_t, :ny_t, :]
-        Q = f['UV'][:latent_length] - mean[np.newaxis, ...]
+        Q = f['UV'][:latent_length, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+    print('Q shape:', Q.shape)
+    print('Data loaded.')
 
     # calculate the compression ratio
     M = math.prod(Q.shape) 
     T = latent_length
-    n = runner.l_config.num_gfem_nodes
-    m = runner.l_config.num_modes
+    if runner.config['latent_type'] == 'dls':
+        n = runner.l_config.num_gfem_nodes
+        m = runner.l_config.num_modes
+    else: 
+        n = 1
+        m = runner.config['latent_params']['num_modes'] - 1
     d = 2
     p = runner.l_config.patch_size
-    CR = M * T / ( d * T * n * (m+1) + d * m * p**2)
+    CR = M / ( d * T * n * (m+1) + d * m * p**2)
 
     print(f'Compression Ratio: {CR}')
 
-    # reconstruction error
-    L2_error = l2_err_norm(true=Q, pred=Q_rec, axis=(1, 2, 3))
+    L2_error = np.sqrt(np.sum((Q-Q_rec)**2, axis=(1,2,3))) / np.sqrt(np.sum(Q**2, axis=(1,2,3)))
     L2_error_mean = L2_error.mean()
-
     print(f'L2 Error Mean: {100*L2_error_mean:.4f}%')
 
+
     # vorticity reconstruction error
-    vort = curl(x,y, Q[..., 0].transpose(1,2,0), Q[..., 1].transpose(1,2,0))
+    vort = curl(X, Y , Q[..., 0].transpose(1,2,0), Q[..., 1].transpose(1,2,0))
     vort = vort.transpose(2,0,1)
-    vort_rec = curl(x,y, Q_rec[..., 0].transpose(1,2,0), Q_rec[..., 1].transpose(1,2,0))
+    vort_rec = curl(X, Y , Q_rec[..., 0].transpose(1,2,0), Q_rec[..., 1].transpose(1,2,0))
     vort_rec = vort_rec.transpose(2,0,1)
 
     vort_error = l2_err_norm(true=vort, pred=vort_rec, axis=(1, 2))

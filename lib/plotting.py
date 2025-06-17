@@ -672,6 +672,8 @@ def animate(runner):
 
     time_lag = runner.config['params']['time_lag']
     time_lim = 100000
+    run_lim = 30 # 60 second max animation length
+    frame_rate = 30 # Frames per second
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
@@ -687,8 +689,13 @@ def animate(runner):
                 if num_snaps > time_lim:
                     num_snaps = time_lim
 
-                pred = f['Q_rec'][time_lag:num_snaps:10]
-                idx = f['idx'][time_lag:num_snaps:10]
+                # Pick frame_skip such that max length is less than run_lim seconds
+                frame_skip = int(max(1, np.ceil(num_snaps / (run_lim * frame_rate))))
+                print(f"Number of snapshots: {num_snaps}, Frame skip: {frame_skip}")
+                print(f"Vid_length: {(num_snaps // frame_skip )/ frame_rate} seconds")
+
+                pred = f['Q_rec'][time_lag:num_snaps:frame_skip]
+                idx = f['idx'][time_lag:num_snaps:frame_skip]
                 tke_pred = f['tke_pred'][:num_snaps]
 
             print(f'Loading truth from {runner.paths_bib.data_path}')
@@ -706,7 +713,7 @@ def animate(runner):
             Q_plot = truth / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
             Q_plot_pred = pred / np.max(np.abs(truth), axis=(0,1,2), keepdims=True)
 
-            num_overlap = (true_num_snaps - idx[0]) // 10
+            num_overlap = (true_num_snaps - idx[0]) // frame_skip
             frames = []
             for i, id in enumerate(idx):  # Number of frames
                 if i % 100 == 0:
@@ -751,9 +758,10 @@ def animate(runner):
                         spine.set_linewidth(1.5)
 
                 t = (np.arange(idx[0], idx[0] + num_snaps)-time_lag) / 100  
+                t_true = t[:len(tke_true)]
                 # Bottom row: TKE plot spanning all columns
                 ax_tke = plt.subplot2grid((3, 3), (2, 0), colspan=3, fig=fig)
-                ax_tke.plot(t, tke_true, label='True TKE', color='k')
+                ax_tke.plot(t_true, tke_true, label='True TKE', color='k')
                 ax_tke.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='--')
                 ax_tke.axvline(id/100, color='b', linestyle=':', linewidth=2, label='Current Frame')
                 ax_tke.set_ylabel('TKE')
@@ -784,7 +792,7 @@ def animate(runner):
             # save as mp4
             writer = imageio.get_writer(
                 runner.paths_bib.anim_dir + pred_name + '.mp4',
-                fps=30,
+                fps=frame_rate,
                 codec='libx264',  # Use H.264 codec for better quality control
                 quality=8,        # 0 (lowest) to 10 (highest), default is 5
                 ffmpeg_params=['-crf', '18']  # Lower CRF = higher quality (default 23, range 0–51)
