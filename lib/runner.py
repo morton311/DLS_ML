@@ -194,7 +194,7 @@ class runner(nn.Module):
             self.model = models.LSTMModel(
                         time_lag=self.config['params']['time_lag'],
                         input_dim=self.config['params']['input_dim'],
-                        hidden_dim=self.config['params']['hidden_dim'],
+                        hidden_dim=self.config['params']['d_model'],
                         num_layers=self.config['params']['num_layers'],
                         batch_size= self.config['train']['batch_size'],
                         ).to(self.device)
@@ -768,7 +768,9 @@ class runner(nn.Module):
                     print('Attention map plot done')
                 plots.plot_phase_portraits(self, point_dict)
                 plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
-                print('Spectrogram plot done\n\n')
+                print('Spectrogram plot done')
+                plots.coeff_PDF(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                print('Coefficient PDF plot done\n\n')
                 
     def compute_TKE(self, pred_path, batch_size=1000):
         """

@@ -154,10 +154,11 @@ class LSTMModel(nn.Module):
         super(LSTMModel, self).__init__()
         self.num_layers = num_layers
         self.batch_size = batch_size
+        self.hidden_dim = hidden_dim
 
         self.input_projection = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = PositionalEncoding(hidden_dim, max_len=time_lag)
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(hidden_dim, hidden_dim, num_layers=num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, input_dim)
 
     def forward(self, x):
@@ -170,13 +171,13 @@ class LSTMModel(nn.Module):
         return out
     
     def init_hidden(self,batch_size,device):
-        hidden = torch.zeros(self.num_layer,
+        hidden = torch.zeros(self.num_layers,
                                 batch_size,
-                                self.hidden_size).to(device)
+                                self.hidden_dim).to(device)
                     
-        cell  =  torch.zeros(self.num_layer,
+        cell  =  torch.zeros(self.num_layers,
                                 batch_size,
-                                self.hidden_size).to(device) 
+                                self.hidden_dim).to(device) 
                     
         return hidden, cell
 

@@ -21,6 +21,7 @@ plt.rcParams['axes.labelsize'] = 10 # Change axes labels font size
 plt.rcParams['xtick.labelsize'] = 10 # Change x-axis tick labels font size
 plt.rcParams['ytick.labelsize'] = 10 # Change y-axis tick labels font size
 plt.rcParams['legend.fontsize'] = 10 # Change legend font size
+plt.rcParams['figure.constrained_layout.use'] = True
 
 def l2_err_norm(true, pred, axis=None):
     """
@@ -47,7 +48,7 @@ def plot_loss(runner):
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=600)
     plt.close()
 
@@ -59,7 +60,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     def add_colorbar(ax, im, ticks=None):
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(im, cax=cax, format='%.2f', ticks=ticks)
+        cbar = fig.colorbar(im, cax=cax, format='%.2f', ticks=ticks, shrink=0.1)
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
 
     with h5py.File(pred_path, 'r') as f:
@@ -92,42 +93,51 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     rms_pred_plot = rms_pred / RMS_max
     
     size = 0.75
+
+    ticks = np.linspace(0, 1, 6)
     
     fig, axs = plt.subplots(1, 2, figsize=(size*width,size*width/2))
-
-    # Example usage with fewer ticks
-    ticks = np.linspace(0, 1, 6)
-
     c1 = axs[0].contourf(X, Y, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
-    add_colorbar(axs[0], c1, ticks=ticks)
     axs[0].set_title('True U RMS')
-    axs[0].axis('off')
+    axs[0].set_xticks([])
+    axs[0].set_yticks([])
+    axs[0].set_xlim(0, 1.0)
+    axs[0].set_ylim(0, 1.0)
     axs[0].set_aspect('equal')
 
     c2 = axs[1].contourf(X, Y, rms_pred_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
-    add_colorbar(axs[1], c2, ticks=ticks)
     axs[1].set_title('Predicted U RMS')
-    axs[1].axis('off')
+    axs[1].set_xticks([])
+    axs[1].set_yticks([])
+    axs[1].set_xlim(0, 1.0)
+    axs[1].set_ylim(0, 1.0)
     axs[1].set_aspect('equal')
 
-    fig.set_tight_layout(True)
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=600, bbox_inches='tight', pad_inches=0.05)
+    fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
+
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=600)
     plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
     c1 = axs[0].contourf(X, Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
-    add_colorbar(axs[0], c1, ticks=ticks)
     axs[0].set_title('True V RMS')
-    axs[0].axis('off')
+    axs[0].set_xticks([])
+    axs[0].set_yticks([])
+    axs[0].set_xlim(0, 1.0)
+    axs[0].set_ylim(0, 1.0)
     axs[0].set_aspect('equal')
+
     c2 = axs[1].contourf(X, Y, rms_pred_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
-    add_colorbar(axs[1], c2, ticks=ticks)
     axs[1].set_title('Predicted V RMS')
-    axs[1].axis('off')
+    axs[1].set_xticks([])
+    axs[1].set_yticks([])
+    axs[1].set_xlim(0, 1.0)
+    axs[1].set_ylim(0, 1.0)
     axs[1].set_aspect('equal')
 
-    fig.set_tight_layout(True)
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_v_comparison.png') , dpi=600, bbox_inches='tight', pad_inches=0.05)
+    fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
+
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_v_comparison.png') , dpi=600)
     plt.close()
 
     
@@ -170,7 +180,7 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     )
     plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_comparison.png'), dpi=600)
     plt.close()
 
@@ -194,7 +204,7 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
         fontsize=8  # Adjust font size
     )
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.tight_layout() #rect=[0, 0, 1, 0.95]
+    # plt.tight_layout() #rect=[0, 0, 1, 0.95]
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_psd_comparison.png'), dpi=600)
     plt.close()
 
@@ -241,7 +251,8 @@ def plot_PSDs(runner, data_dict):
         fontsize=8  # Adjust font size
     )
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 1')
-    fig.tight_layout(rect=[0, 0, 1, 1.15])
+    plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
+    
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p1.png'), dpi=600)
     plt.close()
 
@@ -266,7 +277,8 @@ def plot_PSDs(runner, data_dict):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 2')
-    fig.tight_layout(rect=[0, 0, 1, 1.15])
+    plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
+    
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p2.png'), dpi=600)
     plt.close()
 
@@ -311,7 +323,7 @@ def plot_autocorr(runner, data_dict):
     axs[1,1].set_xlabel('Lag')
     axs[0,0].set_ylabel('Autocorrelation')
     axs[1,0].set_ylabel('Autocorrelation')
-    fig.tight_layout()
+    # fig.tight_layout()
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'autocorr_comparison.png'), dpi=600)
     plt.close()
 
@@ -347,7 +359,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     
-    fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
+    # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p1.png'), dpi=600)
     plt.close()
 
@@ -373,7 +385,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
 
-    fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
+    # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p2.png'), dpi=600)
     plt.close()
 
@@ -421,7 +433,7 @@ def plot_points(runner):
     plt.yticks([])
     plt.xlim(0, 1.0)
     plt.ylim(0, 1.0)
-    plt.tight_layout()
+    # plt.tight_layout()
 
     plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=600)
     plt.close()
@@ -486,7 +498,7 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     )
     fig.suptitle('Velocity Data at Points of Interest')
     fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
-    # fig.tight_layout()
+
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'point_data_comparison.png'), dpi=600)
     plt.close()
 
@@ -540,7 +552,7 @@ def plot_spectrograms(runner, data_dict, idx, true_idx):
             axs[i, 0].set_title(f'True {comp} at {point}')
             axs[i, 0].set_ylabel('Nondimensional frequency')
             cbar0 = fig.colorbar(im0, ax=axs[i, 0], format=FuncFormatter(fmt), 
-                                 label='Power Spectral Density')
+                                 label='Power Spectral Density', shrink=0.8, pad=0.03)
 
             # Plot prediction (no dB, log color scale)
             im1 = axs[i, 1].pcolormesh(
@@ -549,12 +561,12 @@ def plot_spectrograms(runner, data_dict, idx, true_idx):
                 norm=matplotlib.colors.LogNorm(vmin=np.fmax(Sxx_pred, 1e-12).min(), vmax=Sxx_pred.max())
             )
             axs[i, 1].set_title(f'Predicted {comp} at {point}')
-            cbar1 = fig.colorbar(im1, ax=axs[i, 1], format=FuncFormatter(fmt), label='Power Spectral Density')
+            cbar1 = fig.colorbar(im1, ax=axs[i, 1], format=FuncFormatter(fmt), label='Power Spectral Density', shrink=0.8, pad=0.03)
             
 
         for ax in axs[-1, :]:
             ax.set_xlabel('Nondimensional time')
-        plt.tight_layout()
+        # plt.tight_layout()
         plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'spectrogram_{point}.png'), dpi=600)
         plt.close()
 
@@ -572,7 +584,7 @@ def plot_phase_portraits(runner, data_dict):
             data_dict['truth'][point][time_lag:, 1],
             label='True',
             color='k',
-            linestyle='-'
+            linestyle='--'
         )
         # Prediction
         plt.plot(
@@ -594,7 +606,7 @@ def plot_phase_portraits(runner, data_dict):
             fontsize=8  # Adjust font size
         )
         plt.grid(visible=True, linestyle='--', linewidth=0.5)
-        plt.tight_layout()
+        # plt.tight_layout()
         plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'phase_portrait_{point}.png'), dpi=600)
         plt.close()
 
@@ -651,9 +663,59 @@ def attention_maps(runner):
                     ax.set_ylabel("Query Positions")
                     
 
-        plt.tight_layout()
+        # plt.tight_layout()
         plt.savefig(runner.paths_bib.fig_dir + 'attention_weights.png', dpi=600)
         plt.close()
+
+
+def coeff_PDF(runner, data_dict, eval_idx, true_idx):
+    """
+    Plot the probability density function of the predicted and truth data.
+    """
+    time_lag = runner.config['params']['time_lag']
+    size = 0.75
+    fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2))
+
+    # Coefficients for Point 1
+    coeff_true_p1 = data_dict['truth']['p1'][time_lag:, :]
+    coeff_pred_p1 = data_dict['pred']['p1'][time_lag:, :]
+
+    axs[0, 0].hist(coeff_true_p1[:, 0], bins=50, density=True, alpha=0.5, label='True $u_{p1}$', color='k')
+    axs[0, 0].hist(coeff_pred_p1[:, 0], bins=50, density=True, alpha=0.5, label='Predicted $u_{p1}$', color='r')
+    axs[0, 0].set_ylabel('PDF($u_{p1}$)')
+    # axs[0, 0].set_title('PDF of Coefficients at Point 1 (u-component)')
+    
+    axs[0, 1].hist(coeff_true_p1[:, 1], bins=50, density=True, alpha=0.5, label='True $v_{p1}$', color='k')
+    axs[0, 1].hist(coeff_pred_p1[:, 1], bins=50, density=True, alpha=0.5, label='Predicted $v_{p1}$', color='r')
+    axs[0, 1].set_ylabel('PDF($v_{p1}$)')
+    # axs[0, 1].set_title('PDF of Coefficients at Point 1 (v-component)')
+
+    # Coefficients for Point 2
+    coeff_true_p2 = data_dict['truth']['p2'][time_lag:, :]
+    coeff_pred_p2 = data_dict['pred']['p2'][time_lag:, :]
+
+    axs[1, 0].hist(coeff_true_p2[:, 0], bins=50, density=True, alpha=0.5, label='True $u_{p2}$', color='k')
+    axs[1, 0].hist(coeff_pred_p2[:, 0], bins=50, density=True, alpha=0.5, label='Predicted $u_{p2}$', color='r')
+    # axs[1, 0].set_title('PDF of Coefficients at Point 2 (u-component)') 
+    axs[1, 1].hist(coeff_true_p2[:, 1], bins=50, density=True, alpha=0.5, label='True $v_{p2}$', color='k')
+    axs[1, 1].hist(coeff_pred_p2[:, 1], bins=50, density=True, alpha=0.5, label='Predicted $v_{p2}$', color='r')
+    # axs[1, 1].set_title('PDF of Coefficients at Point 2 (v-component)')
+    axs[1, 0].set_ylabel('PDF($u_{p2}$)')
+    axs[1, 1].set_ylabel('PDF($v_{p2}$)')
+    for ax in axs.flat:
+        ax.grid(visible=True, linestyle='--', linewidth=0.5)    
+    axs[0,1].legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.05, 0.9),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
+    fig.suptitle('Probability Density Function of Velocity at Points of Interest')
+    fig.tight_layout(rect=[0, 0, 1, 1.1])
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison.png'), dpi=600)
+    plt.close()
 
 
 def animate(runner):
@@ -777,7 +839,7 @@ def animate(runner):
                 ax_tke.set_title('True vs Predicted TKE')
                 ax_tke.grid(visible=True, linestyle='--', linewidth=0.5)
 
-                plt.tight_layout()
+                # plt.tight_layout()
 
                 # Save the current frame
                 fig.canvas.draw()

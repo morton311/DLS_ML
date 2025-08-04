@@ -11,18 +11,18 @@
     "model":            "tr_enc",
 
     "params": {
-        "time_lag":     64,
-        "d_model":      512,
-        "nhead":        4,
-        "num_layers":   4,
+        "time_lag":     128,
+        "d_model":      1024,
+        "nhead":        8,
+        "num_layers":   8,
         "embed":        "lin"
     },
 
     "train": {
         "train_split":  0.7,
         "test_split":   0.1,
-        "sample_train": 3000,
-        "sample_test":  300,
+        "sample_train": 6000,
+        "sample_test":  600,
         "lr":           0.001,
         "num_epochs":   1000,
         "patience":     10,

@@ -27,8 +27,9 @@
     - dset.to(cpu)
 - [ ] Implement POD, LSTM comparisons
 - [ ] Rapid analysis implementations
-- [ ] Change model folder naming scheme to be more readable
+- [x] Change model folder naming scheme to be more readable
   - potential answer in better config naming scheme
+- [x] Switching to `layout="constrained"` instead of `tight_layout()`
 
 <!-- ### Potential Cases on Script Run
 

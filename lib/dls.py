@@ -579,15 +579,15 @@ def latent_eval(runner):
     # calculate the compression ratio
     M = math.prod(Q.shape) 
     T = latent_length
-    if runner.config['latent_type'] == 'dls':
-        n = runner.l_config.num_gfem_nodes
-        m = runner.l_config.num_modes
-    else: 
-        n = 1
-        m = runner.config['latent_params']['num_modes'] - 1
     d = 2
     p = runner.l_config.patch_size
-    CR = M / ( d * T * n * (m+1) + d * m * p**2)
+    m = runner.l_config.num_modes
+    if runner.config['latent_type'] == 'dls':
+        n = runner.l_config.num_gfem_nodes
+        CR = M / ( d * T * n * (m+1) + d * m * p**2)
+    else: 
+        CR = M / ( d * T * m + d * m * p**2)
+    
 
     print(f'Compression Ratio: {CR}')
 
