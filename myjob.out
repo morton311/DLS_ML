@@ -1,0 +1,235 @@
+Using device: cuda
+
+$ Operating System : Linux
+$ Path : /tmp/slurmtmp.1938774
+
+*************** Directory Tree ***************
+
+slurmtmp.1938774/
+├── configs/
+│   ├── case1_re15k.json
+│   ├── case2_re30k.json
+│   ├── case3_re30k.json
+│   ├── case4_re30k_p49_m5_6ktrain_unsampled.json
+│   ├── case5.1_re30k_p49_m5.json
+│   ├── case5.2_re30k_p49_m5_ta5.json
+│   ├── case5.3_re30k_p49_m5_ta5_6ktrain.json
+│   ├── case5.4_re30k_TS_p49_m5_ta5_6ktrain_unsampled.json
+│   ├── case5.5_re30k_TS_p49_m5_ta5_6ktrain.json
+│   ├── case6.1_re30k_p49_m10_2xTR.json
+│   ├── pod_case3_re30k.json
+│   └── pod_lstm_c3_30k.json
+├── data/
+├── lib/
+│   ├── __init__.py
+│   ├── __pycache__/
+│   ├── datas.py
+│   ├── dls.py
+│   ├── init.py
+│   ├── models.py
+│   ├── plotting.py
+│   ├── pod.py
+│   └── runner.py
+├── main.py
+└── results/
+    └── ldc_30k_60ksnaps/
+        ├── dls_p19m5/
+        │   ├── latent_coeff.h5
+        │   ├── latent_coeff_config.pkl
+        │   └── tr_enc_t64_ta5_l4_d512_h4_train0_7_test0_1_Ntrain6000_Ntest600/
+        └── dls_p49m5/
+            ├── case6_1_re30k_p49_m10_2xTR/
+            ├── latent_coeff.h5
+            └── latent_coeff_config.pkl
+#################### Configuration ####################
+data_name: ldc_30k_60ksnaps
+latent_type: dls
+latent_params:
+  patch_size: 49
+  num_modes: 5
+model: tr_enc
+params:
+  time_lag: 128
+  d_model: 512
+  nhead: 4
+  num_layers: 4
+  embed: lin
+train:
+  train_split: 0.7
+  test_split: 0.1
+  sample_train: 6000
+  sample_test: 600
+  lr: 0.001
+  num_epochs: 1000
+  patience: 10
+  train_ahead: 5
+  batch_size: 256
+pred_lim: 512
+predictions:
+  unseen: {'init': 'val', 'lim': 512, 'arg': 'extrap'}
+  validation: {'init': 'val', 'lim': 5000}
+  seen: {'init': 'train', 'lim': 5000}
+  long: {'init': 'val', 'lim': 20000, 'arg': 'extrap'}
+overwrite: x
+mode: train
+name: case6.1_re30k_p49_m10_2xTR
+log: terminal
+device: cuda
+####################	Loading data...     	####################
+Set         |Total     |First Idx   |Last Idx    |Sampled   
+--------------------------------------------------------
+Train       |42000     |0           |41999       |6000      
+Test        |4200      |42000       |46199       |600       
+Validation  |13800     |46200       |59999       |-         
+Train, test, and validation indices saved to results/ldc_30k_60ksnaps/dls_p49m5/case6_1_re30k_p49_m10_2xTR/split_ids.pkl
+####################	Loading model...    	####################
+Model initialized with 18563248 parameters
+####################	Compiling model...  	####################
+Loss function: MSELoss()
+Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.001
+    maximize: False
+    weight_decay: 0
+)
+Model does not exist at results/ldc_30k_60ksnaps/dls_p49m5/case6_1_re30k_p49_m10_2xTR/model.pth. Training from scratch.
+####################	Training model...   	####################
+Getting training and test data
+Got train data 0/6000
+Got train data 500/6000
+Got train data 1000/6000
+Got train data 1500/6000
+Got train data 2000/6000
+Got train data 2500/6000
+Got train data 3000/6000
+Got train data 3500/6000
+Got train data 4000/6000
+Got train data 4500/6000
+Got train data 5000/6000
+Got train data 5500/6000
+Got train data
+Got test data 0/600
+Got test data 100/600
+Got test data 200/600
+Got test data 300/600
+Got test data 400/600
+Got test data 500/600
+Got test data
+X_train shape: torch.Size([6000, 128, 5808]), Y_train shape: torch.Size([6000, 5, 5808]), dtype: torch.float32
+X_test shape: torch.Size([600, 128, 5808]), Y_test shape: torch.Size([600, 5, 5808]), dtype: torch.float32
+Train loader created with 24 batches
+Test loader created with 3 batches
+| Epoch: 2   /1000 | Train Loss:  0.5973 | Test Loss:  0.5120 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 3   /1000 | Train Loss:  0.4772 | Test Loss:  0.4098 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 4   /1000 | Train Loss:  0.3735 | Test Loss:  0.3083 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 5   /1000 | Train Loss:  0.2826 | Test Loss:  0.2376 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 6   /1000 | Train Loss:  0.2284 | Test Loss:  0.1961 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 7   /1000 | Train Loss:  0.1846 | Test Loss:  0.1600 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 8   /1000 | Train Loss:  0.1524 | Test Loss:  0.1334 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 9   /1000 | Train Loss:  0.1299 | Test Loss:  0.1157 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 10  /1000 | Train Loss:  0.1124 | Test Loss:  0.0995 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 11  /1000 | Train Loss:  0.0989 | Test Loss:  0.0895 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 12  /1000 | Train Loss:  0.0878 | Test Loss:  0.0802 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 13  /1000 | Train Loss:  0.0800 | Test Loss:  0.0733 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 14  /1000 | Train Loss:  0.0729 | Test Loss:  0.0675 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 15  /1000 | Train Loss:  0.0682 | Test Loss:  0.0644 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 16  /1000 | Train Loss:  0.0643 | Test Loss:  0.0589 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 17  /1000 | Train Loss:  0.0597 | Test Loss:  0.0551 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 18  /1000 | Train Loss:  0.0553 | Test Loss:  0.0504 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 19  /1000 | Train Loss:  0.0513 | Test Loss:  0.0463 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 20  /1000 | Train Loss:  0.0480 | Test Loss:  0.0434 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 21  /1000 | Train Loss:  0.0457 | Test Loss:  0.0418 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 22  /1000 | Train Loss:  0.0435 | Test Loss:  0.0395 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 23  /1000 | Train Loss:  0.0417 | Test Loss:  0.0378 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 24  /1000 | Train Loss:  0.0454 | Test Loss:  0.0452 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 25  /1000 | Train Loss:  0.0465 | Test Loss:  0.0410 | Best:   | Patience: 2  /10 | Checkpoint: X |
+| Epoch: 26  /1000 | Train Loss:  0.0430 | Test Loss:  0.0374 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 27  /1000 | Train Loss:  0.0400 | Test Loss:  0.0347 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 28  /1000 | Train Loss:  0.0373 | Test Loss:  0.0325 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 29  /1000 | Train Loss:  0.0352 | Test Loss:  0.0310 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 30  /1000 | Train Loss:  0.0336 | Test Loss:  0.0293 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 31  /1000 | Train Loss:  0.0322 | Test Loss:  0.0277 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 32  /1000 | Train Loss:  0.0313 | Test Loss:  0.0280 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 33  /1000 | Train Loss:  0.0304 | Test Loss:  0.0265 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 34  /1000 | Train Loss:  0.0296 | Test Loss:  0.0258 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 35  /1000 | Train Loss:  0.0290 | Test Loss:  0.0257 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 36  /1000 | Train Loss:  0.0284 | Test Loss:  0.0247 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 37  /1000 | Train Loss:  0.0276 | Test Loss:  0.0246 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 38  /1000 | Train Loss:  0.0275 | Test Loss:  0.0244 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 39  /1000 | Train Loss:  0.0272 | Test Loss:  0.0237 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 40  /1000 | Train Loss:  0.0267 | Test Loss:  0.0237 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 41  /1000 | Train Loss:  0.0266 | Test Loss:  0.0235 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 42  /1000 | Train Loss:  0.0265 | Test Loss:  0.0230 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 43  /1000 | Train Loss:  0.0260 | Test Loss:  0.0221 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 44  /1000 | Train Loss:  0.0253 | Test Loss:  0.0217 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 45  /1000 | Train Loss:  0.0250 | Test Loss:  0.0217 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 46  /1000 | Train Loss:  0.0245 | Test Loss:  0.0216 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 47  /1000 | Train Loss:  0.0243 | Test Loss:  0.0208 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 48  /1000 | Train Loss:  0.0240 | Test Loss:  0.0204 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 49  /1000 | Train Loss:  0.0236 | Test Loss:  0.0207 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 50  /1000 | Train Loss:  0.0235 | Test Loss:  0.0205 | Best:   | Patience: 2  /10 | Checkpoint: X |
+| Epoch: 51  /1000 | Train Loss:  0.0232 | Test Loss:  0.0206 | Best:   | Patience: 3  /10 | Checkpoint:   |
+| Epoch: 52  /1000 | Train Loss:  0.0232 | Test Loss:  0.0203 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 53  /1000 | Train Loss:  0.0230 | Test Loss:  0.0197 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 54  /1000 | Train Loss:  0.0228 | Test Loss:  0.0199 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 55  /1000 | Train Loss:  0.0225 | Test Loss:  0.0194 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 56  /1000 | Train Loss:  0.0223 | Test Loss:  0.0189 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 57  /1000 | Train Loss:  0.0222 | Test Loss:  0.0189 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 58  /1000 | Train Loss:  0.0219 | Test Loss:  0.0188 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 59  /1000 | Train Loss:  0.0220 | Test Loss:  0.0186 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 60  /1000 | Train Loss:  0.0219 | Test Loss:  0.0185 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 61  /1000 | Train Loss:  0.0219 | Test Loss:  0.0190 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 62  /1000 | Train Loss:  0.0218 | Test Loss:  0.0181 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 63  /1000 | Train Loss:  0.0218 | Test Loss:  0.0187 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 64  /1000 | Train Loss:  0.0216 | Test Loss:  0.0186 | Best:   | Patience: 2  /10 | Checkpoint:   |
+| Epoch: 65  /1000 | Train Loss:  0.0213 | Test Loss:  0.0189 | Best:   | Patience: 3  /10 | Checkpoint: X |
+| Epoch: 66  /1000 | Train Loss:  0.0211 | Test Loss:  0.0181 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 67  /1000 | Train Loss:  0.0211 | Test Loss:  0.0182 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 68  /1000 | Train Loss:  0.0211 | Test Loss:  0.0181 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 69  /1000 | Train Loss:  0.0209 | Test Loss:  0.0181 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 70  /1000 | Train Loss:  0.0210 | Test Loss:  0.0181 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 71  /1000 | Train Loss:  0.0208 | Test Loss:  0.0177 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 72  /1000 | Train Loss:  0.0209 | Test Loss:  0.0180 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 73  /1000 | Train Loss:  0.0208 | Test Loss:  0.0179 | Best:   | Patience: 2  /10 | Checkpoint:   |
+| Epoch: 74  /1000 | Train Loss:  0.0206 | Test Loss:  0.0177 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 75  /1000 | Train Loss:  0.0204 | Test Loss:  0.0179 | Best:   | Patience: 1  /10 | Checkpoint: X |
+| Epoch: 76  /1000 | Train Loss:  0.0204 | Test Loss:  0.0175 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 77  /1000 | Train Loss:  0.0201 | Test Loss:  0.0175 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 78  /1000 | Train Loss:  0.0201 | Test Loss:  0.0171 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 79  /1000 | Train Loss:  0.0196 | Test Loss:  0.0168 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 80  /1000 | Train Loss:  0.0195 | Test Loss:  0.0167 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 81  /1000 | Train Loss:  0.0194 | Test Loss:  0.0171 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 82  /1000 | Train Loss:  0.0192 | Test Loss:  0.0168 | Best:   | Patience: 2  /10 | Checkpoint:   |
+| Epoch: 83  /1000 | Train Loss:  0.0192 | Test Loss:  0.0169 | Best:   | Patience: 3  /10 | Checkpoint:   |
+| Epoch: 84  /1000 | Train Loss:  0.0195 | Test Loss:  0.0170 | Best:   | Patience: 4  /10 | Checkpoint:   |
+| Epoch: 85  /1000 | Train Loss:  0.0194 | Test Loss:  0.0167 | Best: X | Patience: 0  /10 | Checkpoint: X |
+| Epoch: 86  /1000 | Train Loss:  0.0197 | Test Loss:  0.0170 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 87  /1000 | Train Loss:  0.0196 | Test Loss:  0.0168 | Best:   | Patience: 2  /10 | Checkpoint:   |
+| Epoch: 88  /1000 | Train Loss:  0.0195 | Test Loss:  0.0167 | Best: X | Patience: 0  /10 | Checkpoint:   |
+| Epoch: 89  /1000 | Train Loss:  0.0193 | Test Loss:  0.0171 | Best:   | Patience: 1  /10 | Checkpoint:   |
+| Epoch: 90  /1000 | Train Loss:  0.0194 | Test Loss:  0.0168 | Best:   | Patience: 2  /10 | Checkpoint: X |
+| Epoch: 91  /1000 | Train Loss:  0.0223 | Test Loss:  0.0275 | Best:   | Patience: 3  /10 | Checkpoint:   |
+| Epoch: 92  /1000 | Train Loss:  0.0386 | Test Loss:  0.0428 | Best:   | Patience: 4  /10 | Checkpoint:   |
+| Epoch: 93  /1000 | Train Loss:  0.0491 | Test Loss:  0.0488 | Best:   | Patience: 5  /10 | Checkpoint:   |
+| Epoch: 94  /1000 | Train Loss:  0.0517 | Test Loss:  0.0488 | Best:   | Patience: 6  /10 | Checkpoint:   |
+| Epoch: 95  /1000 | Train Loss:  0.0531 | Test Loss:  0.0506 | Best:   | Patience: 7  /10 | Checkpoint: X |
+| Epoch: 96  /1000 | Train Loss:  0.0500 | Test Loss:  0.0456 | Best:   | Patience: 8  /10 | Checkpoint:   |
+| Epoch: 97  /1000 | Train Loss:  0.0464 | Test Loss:  0.0405 | Best:   | Patience: 9  /10 | Checkpoint:   |
+Early stopping at epoch 98
+Best model loaded from epoch 88, with test loss: 0.0167
+
+
+Time taken for training:  3033.2574014663696
+Time taken per epoch:  30.951606137411936
+Final model saved to results/ldc_30k_60ksnaps/dls_p49m5/case6_1_re30k_p49_m10_2xTR/model.pth
+Training and test losses saved to results/ldc_30k_60ksnaps/dls_p49m5/case6_1_re30k_p49_m10_2xTR/losses.pkl
+
+Training complete
+####################	End of script       	####################
