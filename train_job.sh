@@ -2,7 +2,7 @@
 #SBATCH --account PAA0008
 #SBATCH --job-name LDC_model_train
 #SBATCH --nodes=1 
-#SBATCH --time=02:00:00 
+#SBATCH --time=04:00:00 
 #SBATCH --mem=128G
 #SBATCH --gpus-per-node=1 
 #SBATCH --mail-type=ALL
@@ -19,7 +19,7 @@ cp -r lib $TMPDIR
 cp -r results $TMPDIR
 
 cd $TMPDIR
-python -u main.py -c 're30k_6ktrain' -m 'train'
+python -u main.py -c 'case6.1_re30k_p49_m10_2xTR' -m 'train' -log 'terminal'
 
 # Copy the results back to the original directory
 cd $SLURM_SUBMIT_DIR

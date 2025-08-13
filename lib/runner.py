@@ -39,8 +39,11 @@ class runner(nn.Module):
 
     def _init_paths_and_logging(self, config):
         is_init_path, paths = init.init_path(config)
-        sys.stdout = open(paths.log_path, 'w')
-        sys.stderr = open(paths.log_path, 'a')
+
+        if config['log'] == 'file':
+            sys.stdout = open(paths.log_path, 'w')
+            sys.stderr = open(paths.log_path, 'a')
+        
 
         print(f'Using device: {self.device}')
         if is_init_path:

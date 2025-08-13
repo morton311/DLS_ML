@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', type=str, default='config.json', help='Name or whole path of config file, must be in json format')
 parser.add_argument('-o', choices=['l', 'm', 'r', 'x'], default='x', help="Overwrite: 'l' for latent space, 'm' for model, 'r' for results, or None")
 parser.add_argument('-m', choices=['train', 'eval', 'pred', 'test','latent', 'anim'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
+parser.add_argument('-log', choices=['file', 'terminal'], default='file', help="Log output to file or terminal")
 args = parser.parse_args()
 
 # Check if arg contains directory name and/or .json
@@ -29,8 +30,6 @@ if not os.path.isfile(args.c):
 
 
 if __name__ == "__main__":
-    # change stdout and stderr to a file named logs/config_name.log
-    log_file = args.c.replace('.json', '.log')
 
     with open(args.c, "r") as f:
         config = json.load(f)
@@ -38,6 +37,7 @@ if __name__ == "__main__":
     config['overwrite'] = args.o
     config['mode'] = args.m 
     config['name'] = os.path.basename(args.c).replace('.json', '')
+    config['log'] = args.log
 
     device = ('cuda' if torch.cuda.is_available() else "cpu")
     config['device'] = device
