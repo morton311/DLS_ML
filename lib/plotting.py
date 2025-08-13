@@ -734,7 +734,7 @@ def animate(runner):
 
     time_lag = runner.config['params']['time_lag']
     time_lim = 100000
-    run_lim = 30 # 60 second max animation length
+    run_lim = 60 # 60 second max animation length
     frame_rate = 30 # Frames per second
     nx = runner.l_config.nx
     ny = runner.l_config.ny
@@ -780,7 +780,8 @@ def animate(runner):
             for i, id in enumerate(idx):  # Number of frames
                 if i % 100 == 0:
                     print(f'Processing frame {i+1}/{len(idx)}')
-                fig, axs = plt.subplots(3, 3, figsize=(16, 15), gridspec_kw={'height_ratios': [1, 1, 0.6]})
+                fig, axs = plt.subplots(3, 3, figsize=(16, 15), gridspec_kw={'height_ratios': [1, 1, 0.6]}, constrained_layout=True)
+                plt.subplots_adjust(wspace=0.1, hspace=0.2)
 
                 # Top two rows: velocity and error plots
                 axs[0, 0].imshow(Q_plot[i, :, :, 0], cmap='seismic', origin='lower', vmin=-1, vmax=1)

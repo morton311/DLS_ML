@@ -1,0 +1,55 @@
+{
+    "data_name":        "ldc_30k_60ksnaps",
+
+    "latent_type":      "dls",
+
+    "latent_params": {
+        "patch_size":   49,
+        "num_modes":    5
+    },
+
+    "model":            "tr_enc",
+
+    "params": {
+        "time_lag":     128,
+        "d_model":      512,
+        "nhead":        4,
+        "num_layers":   4,
+        "embed":        "lin"
+    },
+
+    "train": {
+        "train_split":  0.7,
+        "test_split":   0.1,
+        "sample_train": 6000,
+        "sample_test":  600,
+        "lr":           0.001,
+        "num_epochs":   1000,
+        "patience":     10,
+        "train_ahead":  5,
+        "batch_size":   256
+    },
+
+    "pred_lim":         512,
+
+    "predictions": {
+        "unseen": {
+            "init":     "val",
+            "lim":      512,
+            "arg":      "extrap"
+        },
+        "validation": {
+            "init":     "val",
+            "lim":      5000
+        },
+        "seen": {
+            "init":     "train",
+            "lim":      5000
+        },
+        "long": {
+            "init":     "val",
+            "lim":      20000,
+            "arg":      "extrap"
+        }
+    }
+}

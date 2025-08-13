@@ -14,7 +14,14 @@
 # python -u main.py -c 're30k_p49_m5' -m 'eval'
 # python -u main.py -c 're30k_p49_m5' -m 'anim'
 
-python -u main.py -c 'new_train' -m 'train'
-python -u main.py -c 'new_train' -m 'pred'
-python -u main.py -c 'new_train' -m 'eval'
-python -u main.py -c 'new_train' -m 'anim'
+# python -u main.py -c 'half_p49_m10_re30k' -m 'latent'
+# python -u main.py -c 'half_p49_m10_re30k' -m 'train'
+# python -u main.py -c 'half_p49_m10_re30k' -m 'pred'
+# python -u main.py -c 'half_p49_m10_re30k' -m 'eval'
+# python -u main.py -c 'half_p49_m10_re30k' -m 'anim'
+
+# python -u main.py -c 'tuned_pod_re30k' -m 'latent'
+python -u main.py -c 'tuned_pod_re30k' -m 'train'
+python -u main.py -c 'tuned_pod_re30k' -m 'pred'
+python -u main.py -c 'tuned_pod_re30k' -m 'eval'
+# python -u main.py -c 'tuned_pod_re30k' -m 'anim' 

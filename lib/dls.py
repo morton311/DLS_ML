@@ -547,6 +547,7 @@ def latent_eval(runner):
                 latent_length = eval_length_max
             dofs = f['dofs'][:latent_length, :runner.config['latent_params']['num_modes']]
             modes = f['modes'][:, :runner.config['latent_params']['num_modes']]
+            runner.l_config.num_modes = runner.config['latent_params']['num_modes']
             # reconstruct the data using modes dot dofs
             print('Reconstructing data...')
             Q_rec = np.dot(dofs, modes.T).reshape((latent_length, runner.l_config.nx_t, runner.l_config.ny_t, 2))
@@ -586,7 +587,7 @@ def latent_eval(runner):
         n = runner.l_config.num_gfem_nodes
         CR = M / ( d * T * n * (m+1) + d * m * p**2)
     else: 
-        CR = M / ( d * T * m + d * m * p**2)
+        CR = M / (T * m + m * p**2)
     
 
     print(f'Compression Ratio: {CR}')
@@ -613,7 +614,7 @@ def latent_eval(runner):
 
     tke_error = l2_err_norm(true=tke, pred=tke_rec)
 
-    print(f'TKE Error: {tke_error:.4f}')
+    print(f'TKE Error: {100*tke_error:.4f}%')
 
     print('Saving error metrics to latent_path...')
 
