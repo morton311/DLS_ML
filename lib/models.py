@@ -348,3 +348,104 @@ def predict(model, initial_input, time_lag, num_predictions, device):
     predictions = np.vstack([initial_input[0,:,:], predictions])  # Concatenate 
     return predictions
 
+class bvae_model(nn.Module):
+    """
+    A base class for a Bayesian Variational Autoencoder (BVAE) model.
+    Convolutional encoder decoder model with reparameterization trick.
+    """
+    def __init__(self, latent_dim):
+        super(bvae_model, self).__init__()
+        self.encoder = self.buildEncoder(latent_dim)
+        self.decoder = self.buildDecoder(latent_dim)
+
+    def buildEncoder(self, latent_dim): 
+
+        encoder = nn.Sequential(
+
+            nn.Conv2d(in_channels=2, out_channels=8, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            # nn.ConstantPad2d((0, 1, 0, 1), 0),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            # nn.ConstantPad2d((0, 1, 0, 1), 0),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            # nn.ConstantPad2d((0, 1, 0, 1), 0),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            # nn.ConstantPad2d((0, 1, 0, 1), 0),
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=0),
+            nn.ELU(),
+
+            nn.Flatten(start_dim=1, end_dim=-1),
+
+            nn.Linear(8*8*256, 512),
+            nn.ELU(),
+
+            nn.Linear(512, latent_dim * 2),
+        )
+        width = [512]
+        for i in range(6):
+            width.append( np.floor((width[-1] - 1) / (2) + 1) )
+        
+        return encoder
+    
+    def buildDecoder(self, latent_dim):
+
+        decoder = nn.Sequential(
+
+            nn.Linear(latent_dim, 512),
+            nn.ELU(),
+
+            nn.Linear(512, 8 * 8 * 256),
+            nn.ELU(),
+
+            nn.Unflatten(dim=1, unflattened_size=(256, 8, 8)),
+
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=0, output_padding=0),
+            nn.ELU(),
+
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=0, output_padding=0),
+            nn.ELU(),
+
+            nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=0, output_padding=0),
+            nn.ELU(),
+
+            nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=0, output_padding=0),
+            nn.ELU(),
+
+            nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=3, stride=2, padding=0, output_padding=0),
+            nn.ELU(),
+
+            nn.ConvTranspose2d(in_channels=8, out_channels=2, kernel_size=3, stride=2, padding=0, output_padding=0)
+        )
+        return decoder
+    
+    def sample(self, mean, logvariance):
+        """
+        Reparameterization trick 
+        """
+
+        std = torch.exp(0.5 * logvariance)
+        epsilon = torch.rand_like(std)
+
+        return mean + epsilon*std
+
+    def forward(self, data):
+
+        mean_logvariance = self.encoder(data)
+
+        mean, logvariance = torch.chunk(mean_logvariance, 2, dim=1)
+
+        z = self.sample(mean, logvariance)
+
+        reconstruction = self.decoder(z)
+
+        return reconstruction, mean, logvariance
