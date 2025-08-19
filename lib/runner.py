@@ -72,9 +72,9 @@ class runner(nn.Module):
             self._compute_latent_coefficients()
         self._latent_split()
 
-        # # load latent_config 
-        # with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
-        #     self.l_config = pickle.load(f)
+        # load latent_config 
+        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+            self.l_config = pickle.load(f)
 
 
     def _compute_latent_coefficients(self):
@@ -135,10 +135,22 @@ class runner(nn.Module):
                     val_indices = np.arange(train_len + test_len, total_snaps)
 
                     mean = f['mean'][:]
-                    train_set = np.array(f['UV'][train_indices] - mean[np.newaxis, ...]).transpose(0, 3, 1, 2)  # [S, C, H, W]
-                    test_set = np.array(f['UV'][test_indices] - mean[np.newaxis, ...]).transpose(0, 3, 1, 2)  # [S, C, H, W]
+                    train_set = np.array(f['UV'][train_indices] - mean[np.newaxis, ...])
+                    test_set = np.array(f['UV'][test_indices] - mean[np.newaxis, ...])
+
+                    # compute mean and std of train set and save to latent_dir/latent_scaler.pkl
+                    train_mean = np.mean(train_set, axis=0)
+                    train_std = np.std(train_set, axis=0)
+                    with open(self.paths_bib.latent_dir + 'latent_scaler.pkl', 'wb') as f:
+                        pickle.dump((train_mean, train_std), f)
+
+                    train_set = datas.normalize_data(train_set, train_mean, train_std)
+                    test_set = datas.normalize_data(test_set, train_mean, train_std)
 
                 print(f"Train set shape: {train_set.shape}, Test set shape: {test_set.shape}")
+
+                train_set = train_set.transpose(0, 3, 1, 2)  # [S, C, H, W]
+                test_set = test_set.transpose(0, 3, 1, 2)    # [S, C, H, W]
 
                 # make train and test data loaders
                 train_loader = datas.make_dataloader(
@@ -389,7 +401,7 @@ class runner(nn.Module):
             dof_mean = torch.mean(dofs, dim=0)
             dof_std = torch.std(dofs, dim=0)
 
-            print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
+            # print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
 
             self.dof_mean = dof_mean
             self.dof_std = dof_std
@@ -769,6 +781,7 @@ class runner(nn.Module):
                         dofs=pred_dofs,
                         rec_path=rec_path,
                         data_path=self.paths_bib.data_path,
+                        latent_path=self.paths_bib.latent_path,
                         device=self.device
                     )
 

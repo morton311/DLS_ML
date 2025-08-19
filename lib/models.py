@@ -8,6 +8,7 @@ import numpy as np
 import time
 from tqdm import tqdm
 import copy
+import pickle
 
 
 ## ==================================== Positional Encoding ======================================
@@ -599,12 +600,21 @@ def bvae_batch_encode(model, data_path, latent_path, device, config, batch_size=
     import sys
     import pickle
 
+    # get mean and std from latent_path replace 'coeff.h5' with 'scaler.pkl'
+    latent_scaler_path = latent_path.replace('coeff.h5', 'scaler.pkl')
+    if os.path.exists(latent_scaler_path):
+        with open(latent_scaler_path, 'rb') as f:
+            mean, std = pickle.load(f)
+        print(f"Loaded mean and std from {latent_scaler_path}")
+
     
     # Load the data
     with h5py.File(data_path, 'r') as f: 
         num_samples = f['UV'].shape[0]
         data_shape = f['UV'].shape 
         num_batches = math.ceil(num_samples / batch_size)
+
+        data_mean = f['mean'][:]
 
         with h5py.File(latent_path, 'w') as l:
             if 'dofs' in l.keys():
@@ -623,17 +633,14 @@ def bvae_batch_encode(model, data_path, latent_path, device, config, batch_size=
 
                 print(f"Snapshots: {snap_start} to {snap_end}, batch size: {batch_size}")
         
-                data = f['UV'][snap_start:snap_end, ...] 
-                flag = True if 'mean' in f.keys() else False
-                
-                print(f"Mean is field of h5 file: {flag}")
-                data = data
+                data = f['UV'][snap_start:snap_end, ...] - data_mean[np.newaxis, ...]
+
+                data = normalize_data(data, mean, std)
+
                 data = torch.tensor(data.transpose(0,3,1,2), dtype=torch.float32).to(device)
                 
                 model.eval()
                 with torch.no_grad():
-                    if not data.is_cuda:
-                        data = data.to(device, non_blocking=True)
                     encoded_data = bvae_encode(model, data, device)
                     l['dofs'][snap_start:snap_end, :] = encoded_data.cpu().numpy()
     
@@ -666,7 +673,7 @@ class bvae_latent_config:
         self.num_vars = data_shape[3]
         self.num_snaps = data_shape[0]
 
-def bvae_batch_decode(model, dofs, rec_path, data_path, device, batch_size=1000):
+def bvae_batch_decode(model, dofs, rec_path, data_path, latent_path, device, batch_size=1000):
     """
     Decode the latent space in batches and save the reconstructed data.
     
@@ -681,6 +688,13 @@ def bvae_batch_decode(model, dofs, rec_path, data_path, device, batch_size=1000)
     import h5py
     import numpy as np
     import sys
+
+    # get mean and std from latent_path replace 'coeff.h5' with 'scaler.pkl'
+    latent_scaler_path = latent_path.replace('coeff.h5', 'scaler.pkl')
+    if os.path.exists(latent_scaler_path):
+        with open(latent_scaler_path, 'rb') as f:
+            mean, std = pickle.load(f)
+        print(f"Loaded mean and std from {latent_scaler_path}")
 
     if isinstance(dofs, str):
         dof_path = dofs
@@ -711,8 +725,11 @@ def bvae_batch_decode(model, dofs, rec_path, data_path, device, batch_size=1000)
             coeffs = torch.tensor(dofs[start:end, :], dtype=torch.float32).to(device)
             rec_data = bvae_decode(model, coeffs, device)
             rec_data = rec_data.cpu().numpy()
-            rec_file['Q_rec'][start:end, :] = rec_data.transpose(0, 2, 3, 1)  # Convert to [samples, height, width, vars]
+            rec_data = rec_data.transpose(0, 2, 3, 1)  # Convert to [samples, height, width, vars]
+            rec_file['Q_rec'][start:end, :] = denormalize_data(rec_data, mean, std)
 
             time_end = time.time()
-            print(f"Batch {i + 1} processed in {time_end - time_start:.2f} seconds")
+            sys.stdout.write(f"Batch {i + 1} processed in {time_end - time_start:.2f} seconds")
+            sys.stdout.write('\n')
+            sys.stdout.flush()
 

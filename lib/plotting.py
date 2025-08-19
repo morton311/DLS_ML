@@ -629,6 +629,8 @@ def attention_maps(runner):
             initial_input = np.concatenate((dof_u, dof_v), axis=1)
         elif runner.config['latent_type'] == 'pod':
             initial_input = f['dofs'][val_indices, :runner.config['latent_params']['num_modes']]
+        elif runner.config['latent_type'] == 'bvae':
+            initial_input = f['dofs'][val_indices, :runner.config['latent_params']['latent_dim']]
 
         with open(os.path.join(runner.paths_bib.model_dir, 'dof_scaler.pkl'), 'rb') as f:
             dof_mean, dof_std = pickle.load(f)
