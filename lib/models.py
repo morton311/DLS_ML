@@ -348,84 +348,92 @@ def predict(model, initial_input, time_lag, num_predictions, device):
     predictions = np.vstack([initial_input[0,:,:], predictions])  # Concatenate 
     return predictions
 
+class bvae_encoder(nn.Module):
+    def __init__(self, latent_dim):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels=2, out_channels=8, kernel_size=3, stride=2, padding=1)
+        self.act1 = nn.ELU()
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, stride=2, padding=1)
+        self.act2 = nn.ELU()
+        self.conv3 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1)
+        self.act3 = nn.ELU()
+        self.conv4 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)
+        self.act4 = nn.ELU()
+        self.conv5 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)
+        self.act5 = nn.ELU()
+        self.conv6 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)
+        self.act6 = nn.ELU()
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(8*8*256, 512)
+        self.act7 = nn.ELU()
+        self.fc2 = nn.Linear(512, latent_dim * 2)
+
+    def forward(self, x):
+        x = self.act1(self.conv1(x))
+        x = self.act2(self.conv2(x))
+        x = self.act3(self.conv3(x))
+        x = self.act4(self.conv4(x))
+        x = self.act5(self.conv5(x))
+        x = self.act6(self.conv6(x))        
+        x = self.flatten(x)
+        x = self.act7(self.fc1(x))
+        x = self.fc2(x)
+        return x
+    
+class bvae_decoder(nn.Module):
+    def __init__(self, latent_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(latent_dim, 512)
+        self.act1 = nn.ELU()
+        self.fc2 = nn.Linear(512, 8*8*256)
+        self.act2 = nn.ELU()
+        self.unflatten = nn.Unflatten(dim=1, unflattened_size=(256, 8, 8))
+        self.deconv1 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.act3 = nn.ELU()
+        self.deconv2 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.act4 = nn.ELU()
+        self.deconv3 = nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.act5 = nn.ELU()
+        self.deconv4 = nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.act6 = nn.ELU()
+        self.deconv5 = nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.act7 = nn.ELU()
+        self.deconv6 = nn.ConvTranspose2d(in_channels=8, out_channels=2, kernel_size=3, stride=2, padding=1, output_padding=1)
+
+    def forward(self, x):
+        x = self.act1(self.fc1(x))
+        x = self.act2(self.fc2(x))
+        x = self.unflatten(x)
+        x = self.act3(self.deconv1(x))
+        x = self.act4(self.deconv2(x))
+        x = self.act5(self.deconv3(x))
+        x = self.act6(self.deconv4(x))
+        x = self.act7(self.deconv5(x))
+        x = self.deconv6(x)
+        return x
+
 class bvae_model(nn.Module):
     """
     A base class for a Bayesian Variational Autoencoder (BVAE) model.
     Convolutional encoder decoder model with reparameterization trick.
     """
     def __init__(self, latent_dim):
-        super(bvae_model, self).__init__()
+        super().__init__()
         self.encoder = self.buildEncoder(latent_dim)
         self.decoder = self.buildDecoder(latent_dim)
 
-    def buildEncoder(self, latent_dim): 
-
-        encoder = nn.Sequential(
-
-            nn.Conv2d(in_channels=2, out_channels=8, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            # nn.ConstantPad2d((0, 1, 0, 1), 0),
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            # nn.ConstantPad2d((0, 1, 0, 1), 0),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            # nn.ConstantPad2d((0, 1, 0, 1), 0),
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            # nn.ConstantPad2d((0, 1, 0, 1), 0),
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=0),
-            nn.ELU(),
-
-            nn.Flatten(start_dim=1, end_dim=-1),
-
-            nn.Linear(8*8*256, 512),
-            nn.ELU(),
-
-            nn.Linear(512, latent_dim * 2),
-        )
-        width = [512]
-        for i in range(6):
-            width.append( np.floor((width[-1] - 1) / (2) + 1) )
-        
+    
+    def buildEncoder(self, latent_dim):
+        encoder = bvae_encoder(latent_dim)
         return encoder
+# width = [512]
+# for i in range(6):
+#     width.append( np.floor((width[-1] - 1) / (2) + 1) )
+
     
     def buildDecoder(self, latent_dim):
 
-        decoder = nn.Sequential(
-
-            nn.Linear(latent_dim, 512),
-            nn.ELU(),
-
-            nn.Linear(512, 8 * 8 * 256),
-            nn.ELU(),
-
-            nn.Unflatten(dim=1, unflattened_size=(256, 8, 8)),
-
-            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=0, output_padding=0),
-            nn.ELU(),
-
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=0, output_padding=0),
-            nn.ELU(),
-
-            nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=0, output_padding=0),
-            nn.ELU(),
-
-            nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=0, output_padding=0),
-            nn.ELU(),
-
-            nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=3, stride=2, padding=0, output_padding=0),
-            nn.ELU(),
-
-            nn.ConvTranspose2d(in_channels=8, out_channels=2, kernel_size=3, stride=2, padding=0, output_padding=0)
-        )
+        decoder = bvae_decoder(latent_dim)
         return decoder
     
     def sample(self, mean, logvariance):
@@ -449,3 +457,262 @@ class bvae_model(nn.Module):
         reconstruction = self.decoder(z)
 
         return reconstruction, mean, logvariance
+    
+def bvae_loss(reconstruction, data, mean, logvariance, beta):
+    MSELoss = nn.MSELoss(reduction='mean').cuda()
+    MSE = MSELoss(reconstruction, data)
+
+    KLD = -0.5 * torch.mean(1 + logvariance - mean.pow(2) - logvariance.exp())
+
+    loss = MSE + KLD * beta
+
+    return loss, MSE, KLD
+
+def train_bvae(model, train_loader, test_loader, optimizer, config):
+
+    best_test_loss = float('inf')
+    early_stop_counter = 0
+    losses = []
+    test_losses = []
+    patience = config['train']['patience']
+    num_epochs = config['train']['num_epochs']
+    beta = config['latent_params']['beta']
+
+    # Training loop
+    start_time = time.time()
+    best_model = None
+    best_epoch = 0
+
+    for epoch in range(num_epochs):
+        model.train()
+        epoch_loss = 0
+        logVar_batch = []
+
+        ## --------------------------------------- Train ---------------------------------------
+        for inputs, targets in train_loader: 
+            optimizer.zero_grad()
+
+            # Forward pass
+            outputs, mean, logvariance = model(inputs)
+            loss, MSE, KLD = bvae_loss(outputs, inputs, mean, logvariance, beta)
+            epoch_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            logVar_batch.append(np.exp(0.5* np.mean(logvariance.detach().cpu().numpy(), 0)))
+        losses.append(epoch_loss / len(train_loader))
+        
+        ## --------------------------------------- Test ---------------------------------------
+        # Evaluate the model on the test set
+        model.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for inputs, targets in test_loader:
+                outputs, mean, logvariance = model(inputs)
+                loss, MSE, KLD = bvae_loss(outputs, inputs, mean, logvariance, beta)
+                test_loss += loss.item()
+        test_losses.append(test_loss / len(test_loader))
+        
+        ## ------------------------------- Early stop and Checkpoint -------------------------------
+        # Early stopping and saving the best model
+        if epoch > 0:
+            if np.isnan(test_losses[-1]) or np.isnan(losses[-1]):
+                print(f'NaN loss at epoch {epoch+1}. Stopping training.')
+                model.load_state_dict(best_model)
+                break
+            elif test_loss / len(test_loader) < best_test_loss:
+                best_test_loss = test_loss / len(test_loader)
+                best_model = copy.deepcopy(model.state_dict())
+
+                best_epoch = epoch + 1
+                early_stop_counter = 0
+            else:
+                early_stop_counter += 1
+                if early_stop_counter >= patience:
+                    print(f'Early stopping at epoch {epoch+1}')
+                    model.load_state_dict(best_model)
+                    print(f'Best model loaded from epoch {best_epoch}, with test loss: {best_test_loss:.4f}')
+                    break
+
+        best_flag = 'X' if (epoch + 1) == best_epoch else ' '
+        mode_collapse = (np.mean(np.stack(logVar_batch, axis=0), 0) < 0.1).sum()
+        print(f"| Epoch: {epoch+1:<4}/{config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:8.6f} | Test Loss: {test_losses[-1]:8.6f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{config['train']['patience']} | Mode Collapsed: {mode_collapse:<3}/{config['latent_params']['latent_dim']:<3} |")
+    end_time = time.time()
+    print('Time taken for training: ', end_time - start_time)
+    print('Time taken per epoch: ', (end_time - start_time) / num_epochs)
+    
+    return model, {"train_losses": losses, "test_losses": test_losses}
+
+
+def bvae_encode(model, data, device):
+    """
+    Encode the data using the trained model.
+    
+    Args:
+        model: The trained model.
+        data: The input data to encode.
+        device: The device to run the model on (CPU or GPU).
+    
+    Returns:
+        Encoded data.
+    """
+    model.eval()
+    with torch.no_grad():
+        if not data.is_cuda:
+            data = data.to(device, non_blocking=True)
+        _, mean, _ = model(data)
+    return mean
+
+def bvae_decode(model, z, device):
+    """
+    Decode the latent representation using the trained model.
+    
+    Args:
+        model: The trained model.
+        z: The latent representation to decode.
+        device: The device to run the model on (CPU or GPU).
+    
+    Returns:
+        Decoded data.
+    """
+    model.eval()
+    with torch.no_grad():
+        if not z.is_cuda:
+            z = z.to(device, non_blocking=True)
+        reconstruction = model.decoder(z)
+    return reconstruction
+
+
+
+def bvae_batch_encode(model, data_path, latent_path, device, config, batch_size=1000):
+    """
+    Encode original data in batches for the latent space. 
+    
+    All coefficients saved to latent_path.
+    Args:
+        model: The trained model.
+        data_path: Path to the input data in .h5 format.
+        latent_path: Path to save the encoded latent space in h5 format.
+        device: The device to run the model on (CPU or GPU).
+    """
+
+    import h5py
+    import sys
+    import pickle
+
+    
+    # Load the data
+    with h5py.File(data_path, 'r') as f: 
+        num_samples = f['UV'].shape[0]
+        data_shape = f['UV'].shape 
+        num_batches = math.ceil(num_samples / batch_size)
+
+        with h5py.File(latent_path, 'w') as l:
+            if 'dofs' in l.keys():
+                del l['dofs']
+            l.create_dataset('dofs', (num_samples, config['latent_params']['latent_dim']), dtype='float32')
+
+            for id in range(num_batches):
+                snap_start = id * batch_size
+                snap_end = (id + 1) * batch_size
+                if snap_end >= num_samples:
+                    snap_end = num_samples
+                batch_size = snap_end - snap_start
+
+                print(f"Processing batch {id + 1}/{num_batches} ({snap_start}:{snap_end})")
+                sys.stdout.flush()
+
+                print(f"Snapshots: {snap_start} to {snap_end}, batch size: {batch_size}")
+        
+                data = f['UV'][snap_start:snap_end, ...] 
+                flag = True if 'mean' in f.keys() else False
+                
+                print(f"Mean is field of h5 file: {flag}")
+                data = data
+                data = torch.tensor(data.transpose(0,3,1,2), dtype=torch.float32).to(device)
+                
+                model.eval()
+                with torch.no_grad():
+                    if not data.is_cuda:
+                        data = data.to(device, non_blocking=True)
+                    encoded_data = bvae_encode(model, data, device)
+                    l['dofs'][snap_start:snap_end, :] = encoded_data.cpu().numpy()
+    
+    print(f"Latent space saved to {latent_path}")
+    l_config = bvae_latent_config(config, data_shape)
+    with open(latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
+        pickle.dump(l_config, f)
+    print(f"Latent configuration saved to {latent_path.replace('.h5', '_config.pkl')}")
+
+
+class bvae_latent_config:
+    """
+    Save the latent configuration for the model.
+    
+    Args:
+        model: The trained model.
+        latent_dim: The dimension of the latent space.
+    
+    Returns:
+        A dictionary containing the latent configuration.
+    """
+    def __init__(self, config, data_shape):
+        self.latent_dim = config['latent_params']['latent_dim']
+        self.num_modes = config['latent_params']['latent_dim']
+        self.beta = config['latent_params']['beta']
+        self.nx = data_shape[1]
+        self.ny = data_shape[2]
+        self.nx_t = self.nx
+        self.ny_t = self.ny
+        self.num_vars = data_shape[3]
+        self.num_snaps = data_shape[0]
+
+def bvae_batch_decode(model, dofs, rec_path, data_path, device, batch_size=1000):
+    """
+    Decode the latent space in batches and save the reconstructed data.
+    
+    Args:
+        model: The trained model.
+        dofs: Path to the latent space data or a tensor of latent coefficients.
+        rec_path: Path to save the reconstructed data.
+        latent_path: Path to the latent space file.
+        device: The device to run the model on (CPU or GPU).
+        batch_size: Number of samples to process in each batch.
+    """
+    import h5py
+    import numpy as np
+    import sys
+
+    if isinstance(dofs, str):
+        dof_path = dofs
+        with h5py.File(dof_path, 'r') as f:
+            dofs = f['dofs'][:]
+
+    num_snaps = dofs.shape[0]
+    num_batches = num_snaps // batch_size
+    if num_snaps % batch_size != 0:
+        num_batches += 1
+
+    with h5py.File(data_path, 'r') as f:
+        nx_t = f['UV'].shape[1]
+        ny_t = f['UV'].shape[2]
+
+    with h5py.File(rec_path, 'w') as rec_file:
+        if 'Q_rec' in rec_file.keys():
+            del rec_file['Q_rec']
+        rec_file.create_dataset('Q_rec', (num_snaps, nx_t, ny_t, 2), dtype='float32')
+
+        for i in range(num_batches):
+            start = i * batch_size
+            end = min((i + 1) * batch_size, num_snaps)
+            sys.stdout.write(f"Reconstructing batch {i + 1}/{num_batches} ({start}:{end})")
+            sys.stdout.flush()
+
+            time_start = time.time()
+            coeffs = torch.tensor(dofs[start:end, :], dtype=torch.float32).to(device)
+            rec_data = bvae_decode(model, coeffs, device)
+            rec_data = rec_data.cpu().numpy()
+            rec_file['Q_rec'][start:end, :] = rec_data.transpose(0, 2, 3, 1)  # Convert to [samples, height, width, vars]
+
+            time_end = time.time()
+            print(f"Batch {i + 1} processed in {time_end - time_start:.2f} seconds")
+

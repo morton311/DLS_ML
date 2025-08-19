@@ -80,7 +80,7 @@ def make_dataloader(X, Y, batch_size=32, shuffle=True):
 
     # Create a TensorDataset
     dataset = TensorDataset(X, Y)
-
+    
     # Create a DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 

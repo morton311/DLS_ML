@@ -72,9 +72,9 @@ class runner(nn.Module):
             self._compute_latent_coefficients()
         self._latent_split()
 
-        # load latent_config 
-        with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
-            self.l_config = pickle.load(f)
+        # # load latent_config 
+        # with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+        #     self.l_config = pickle.load(f)
 
 
     def _compute_latent_coefficients(self):
@@ -111,7 +111,87 @@ class runner(nn.Module):
             with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
                 pickle.dump(latent_config, f)
 
+        elif self.config['latent_type'] == 'bvae':
+            bvae = models.bvae_model(latent_dim=self.config['latent_params']['latent_dim'])
+            bvae.to(self.device)
 
+            if not os.path.exists(self.paths_bib.latent_model_path) and not self.config['overwrite'] in ['l', 'm']:
+
+                train_snaps = self.config['latent_params'].get('train_snaps', 2500)
+                train_split = self.config['latent_params'].get('train_test_split', 0.8)
+                test_split = self.config['latent_params'].get('train_val_split', 0.1)
+
+                
+                with h5py.File(self.paths_bib.data_path, 'r') as f:
+                    total_snaps = f['UV'].shape[0]
+                    if total_snaps < train_snaps:
+                        train_snaps = total_snaps
+
+                    train_len = int(total_snaps * train_split)
+                    test_len = int(train_len * test_split)
+
+                    train_indices = np.arange(0, train_len)
+                    test_indices = np.arange(train_len, train_len + test_len)
+                    val_indices = np.arange(train_len + test_len, total_snaps)
+
+                    mean = f['mean'][:]
+                    train_set = np.array(f['UV'][train_indices] - mean[np.newaxis, ...]).transpose(0, 3, 1, 2)  # [S, C, H, W]
+                    test_set = np.array(f['UV'][test_indices] - mean[np.newaxis, ...]).transpose(0, 3, 1, 2)  # [S, C, H, W]
+
+                print(f"Train set shape: {train_set.shape}, Test set shape: {test_set.shape}")
+
+                # make train and test data loaders
+                train_loader = datas.make_dataloader(
+                    torch.from_numpy(train_set).float().to(self.device),
+                    torch.from_numpy(train_set).float().to(self.device),
+                    batch_size=self.config['latent_params'].get('batch_size', 256),
+                    shuffle=True
+                )
+                test_loader = datas.make_dataloader(
+                    torch.from_numpy(test_set).float().to(self.device),
+                    torch.from_numpy(test_set).float().to(self.device),
+                    batch_size=self.config['latent_params'].get('batch_size', 256),
+                    shuffle=False
+                )
+                
+
+                # create optimizer
+                optimizer = torch.optim.Adam(bvae.parameters(), lr=self.config['latent_params'].get('lr', 2e-4))
+
+                bvae, losses = models.train_bvae(
+                    model=bvae,
+                    train_loader=train_loader,
+                    test_loader=test_loader,
+                    optimizer=optimizer,
+                    config=self.config
+                )
+
+                # Save model and losses
+                torch.save(bvae.state_dict(), self.paths_bib.latent_model_path)
+                with open(self.paths_bib.latent_dir + 'bvae_losses.pkl', 'wb') as f:
+                    pickle.dump(losses, f)
+                
+                print(f"Latent model saved to {self.paths_bib.latent_model_path}")
+                print(f"Latent losses saved to {self.paths_bib.latent_dir + 'bvae_losses.pkl'}")
+
+            else:
+                print(f"Latent model already exists at {self.paths_bib.latent_model_path}. Loading model.")
+                
+                bvae.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True))
+                bvae.to(self.device)
+
+
+            if os.path.exists(self.paths_bib.latent_path):
+                print(f"Latent coefficients already exist at {self.paths_bib.latent_path}. Skipping encoding.")
+            else:
+                # Encode the full dataset to get latent coefficients
+                models.bvae_batch_encode(
+                    model=bvae,
+                    data_path=self.paths_bib.data_path,
+                    latent_path=self.paths_bib.latent_path,
+                    config=self.config,
+                    device=self.device
+                )
 
 
     def _latent_split(self):
@@ -122,6 +202,9 @@ class runner(nn.Module):
             elif self.config['latent_type'] == 'pod':
                 total_snaps = f['dofs'].shape[0]
                 input_dim = self.config['latent_params']['num_modes'] 
+            elif self.config['latent_type'] == 'bvae':
+                total_snaps = f['dofs'].shape[0]
+                input_dim = self.config['latent_params']['latent_dim']
             self.config['params']['input_dim'] = input_dim
             
 
@@ -297,8 +380,16 @@ class runner(nn.Module):
                 for i, idx in enumerate(self.train_indices):
                     dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
 
+            elif self.config['latent_type'] == 'bvae':
+                dofs_not_scaled = f['dofs']
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+
             dof_mean = torch.mean(dofs, dim=0)
             dof_std = torch.std(dofs, dim=0)
+
+            print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
 
             self.dof_mean = dof_mean
             self.dof_std = dof_std
@@ -313,6 +404,8 @@ class runner(nn.Module):
                     v = torch.from_numpy(dof_v[idx:idx+length]).float()
                     dof = torch.cat((u, v), dim=1)
                 elif latent_type == 'pod':
+                    dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
+                elif latent_type == 'bvae':
                     dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
                 dof = (dof - dof_mean) / dof_std
                 return dof
@@ -362,6 +455,7 @@ class runner(nn.Module):
             best_model = None
             early_stop_counter = 0
             best_test_loss = float('inf')
+            best_epoch = 0
 
         start_time = time.time()
         
@@ -417,7 +511,7 @@ class runner(nn.Module):
             
             ## ------------------------------- Early stop and Checkpoint -------------------------------
             # Early stopping and saving the best model
-            if epoch > 0:
+            if epoch > 1:
                 if np.isnan(test_losses[-1]) or np.isnan(losses[-1]):
                     print(f'NaN loss at epoch {epoch+1}. Stopping training.')
                     self.model.load_state_dict(best_model)
@@ -451,9 +545,9 @@ class runner(nn.Module):
                     }, self.paths_bib.checkpoint_path)
                     # print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
                 
-                best_flag = 'X' if (epoch + 1) == best_epoch else ' '
-                checkpoint_flag = 'X' if (epoch + 1) % 5 == 0 else ' '
-                print(f"| Epoch: {epoch+1:<4}/{self.config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:7.4f} | Test Loss: {test_losses[-1]:7.4f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{self.config['train']['patience']} | Checkpoint: {checkpoint_flag:<1} |")
+            best_flag = 'X' if (epoch + 1) == best_epoch else ' '
+            checkpoint_flag = 'X' if (epoch + 1) % 5 == 0 else ' '
+            print(f"| Epoch: {epoch+1:<4}/{self.config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:7.4f} | Test Loss: {test_losses[-1]:7.4f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{self.config['train']['patience']} | Checkpoint: {checkpoint_flag:<1} |")
 
         end_time = time.time()
         print('\n\nTime taken for training: ', end_time - start_time)
@@ -478,7 +572,7 @@ class runner(nn.Module):
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
             if self.config['latent_type'] == 'dls':
                 num_snaps = f['dof_u'].shape[0]
-            elif self.config['latent_type'] == 'pod':
+            elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
                 num_snaps = f['dofs'].shape[0]
 
         for pred_name in self.config['predictions'].keys():
@@ -512,6 +606,8 @@ class runner(nn.Module):
                     initial_input = np.concatenate((dof_u, dof_v), axis=1)
                 elif self.config['latent_type'] == 'pod':
                     initial_input = f['dofs'][idx, :self.config['latent_params']['num_modes'] ]
+                elif self.config['latent_type'] == 'bvae':
+                    initial_input = f['dofs'][idx, :self.config['latent_params']['latent_dim'] ]
             # print(f"Initial input shape: {initial_input.shape}")
 
             # make predictions
@@ -527,7 +623,7 @@ class runner(nn.Module):
                     f.create_dataset('dof_u', data=pred_dof_u)
                     f.create_dataset('dof_v', data=pred_dof_v)
                     f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
-            elif self.config['latent_type'] == 'pod':
+            elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
                 
                 with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
                     f.create_dataset('dofs', data=pred)
@@ -652,6 +748,30 @@ class runner(nn.Module):
                                        batch_size=1000)
                     
                     # copy idx field from original file to rec file
+                    with h5py.File(rec_path, 'a') as f:
+                        f.create_dataset('idx', data=idx)
+
+                elif self.config['latent_type'] == 'bvae':
+                    with h5py.File(pred_path, 'r') as f:
+                        pred_dofs = f['dofs'][:]
+                        idx = f['idx'][:]
+
+                    # Load the latent config
+                    with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
+                        latent_config = pickle.load(f)
+
+                    bvae_model = models.bvae_model(self.config['latent_params']['latent_dim'])
+                    bvae_model.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True))
+                    bvae_model.to(self.device)
+
+                    models.bvae_batch_decode(
+                        model=bvae_model,
+                        dofs=pred_dofs,
+                        rec_path=rec_path,
+                        data_path=self.paths_bib.data_path,
+                        device=self.device
+                    )
+
                     with h5py.File(rec_path, 'a') as f:
                         f.create_dataset('idx', data=idx)
                 
