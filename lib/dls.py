@@ -7,6 +7,7 @@ import sys
 import h5py
 from tqdm import tqdm
 from scipy.sparse.linalg import factorized
+import lib.models as models
 
 def random_patch_sampling(data, patch_size):
     num_patches = 10000
@@ -524,6 +525,9 @@ def latent_eval(runner):
     print(f"{'#'*20}\t{'Evaluating latent...':<20}\t{'#'*20}")
     import math
     from lib.plotting import l2_err_norm, curl
+    import torch 
+    import pickle
+
     # pull the latent space from h5 file
     eval_length_max = 2500
     with h5py.File(runner.paths_bib.latent_path, 'r') as f:
@@ -554,43 +558,135 @@ def latent_eval(runner):
             print('Data shape:', Q_rec.shape)
             print('Data reconstructed.')
 
+        elif runner.config['latent_type'] == 'bvae':
+            from matplotlib import pyplot as plt
+            import os
+            latent_dim = runner.config['latent_params']['latent_dim']
+            print('Getting latent data')
+            latent_length = f['dofs'].shape[0]
+            if latent_length > eval_length_max:
+                latent_length = eval_length_max
+            dofs = f['dofs'][:latent_length, :latent_dim]
+            print('dofs shape:', dofs.shape)
+
+            print('Loading BVAE model')
+            bvae = models.bvae_model(latent_dim)
+            bvae.load_state_dict(torch.load(runner.paths_bib.latent_model_path, weights_only=True))
+            bvae.to(runner.device)
+
+            bvae.eval()
+
+            print('Reconstructing data...')
+
+            dofs = torch.tensor(dofs, dtype=torch.float32).to(runner.device)
+            Q_rec = models.bvae_decode(bvae, dofs, runner.device)
+            Q_rec = Q_rec.cpu().detach().numpy().transpose(0,2,3,1)
+            # rescale the data to the original mean and std
+            scaler_path = runner.paths_bib.latent_dir + 'latent_scaler.pkl'
+            if os.path.exists(scaler_path):
+                with open(scaler_path, 'rb') as f:
+                    mean, std = pickle.load(f)
+                Q_rec = models.denormalize_data(Q_rec, mean, std)
+                
+                
+            print('Data shape:', Q_rec.shape)
+            print('Data reconstructed.')
+
+            bvae_modes = np.zeros((latent_dim, Q_rec.shape[1], Q_rec.shape[2], Q_rec.shape[3]))
+            os.makedirs(runner.paths_bib.fig_dir + 'latent_modes/', exist_ok=True)
+
+            print('Saving BVAE modes...')
+            for i in range(latent_dim):
+                z = torch.zeros(latent_dim)
+                z[i] = 1
+                z = z.to(runner.device)
+                bvae_mode = models.bvae_decode(bvae, z.unsqueeze(0), runner.device)
+                bvae_mode = bvae_mode.cpu().detach().numpy().squeeze().transpose(1,2,0)
+                bvae_modes[i] = bvae_mode
+                # Make a figure of the mode and save to figs/latent_modes/
+                umax = np.max(np.abs(bvae_mode[:,:,0]))
+                vmax = np.max(np.abs(bvae_mode[:,:,1]))
+                fig, ax = plt.subplots(1,2, figsize=(8,4))
+                im0 = ax[0].imshow(bvae_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower')
+                ax[0].set_title(f'BVAE Mode {i+1} - u')
+                im1 = ax[1].imshow(bvae_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+                ax[1].set_title(f'BVAE Mode {i+1} - v')
+                
+                plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/bvae_mode_{i+1}.png', dpi=600)
+                plt.close()
+
+    if runner.config['latent_type'] == 'bvae':
+        with h5py.File(runner.paths_bib.latent_path, 'a') as f:
+            if 'modes' in f.keys():
+                del f['modes']
+            f.create_dataset('modes', data=bvae_modes)
+
+        with h5py.File(runner.paths_bib.data_path, 'r') as f:
+            mean = f['mean'][:]
+            Q = f['UV'][:latent_length] - mean[np.newaxis, ...]
+
+            nx_t = Q.shape[1]
+            ny_t = Q.shape[2]
+            x = np.linspace(0, 1, nx_t)
+            y = np.linspace(0, 1, ny_t)
+
+            X, Y = np.meshgrid(x, y)
+
+        # save reconstruction comparison to ground truth for first snapshot
+        fig, ax = plt.subplots(2, 2, figsize=(8,8))
+        vmax = np.max(np.abs(Q[0,:,:,:]))
+        im0 = ax[0,0].imshow(Q[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        ax[0,0].set_title('Ground Truth - u')
+        im1 = ax[0,1].imshow(Q[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        ax[0,1].set_title('Ground Truth - v')
+        im2 = ax[1,0].imshow(Q_rec[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        ax[1,0].set_title('Reconstruction - u')
+        im3 = ax[1,1].imshow(Q_rec[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        ax[1,1].set_title('Reconstruction - v')
+        plt.colorbar(im3, ax=ax, orientation='vertical', fraction=.1, shrink=0.8)
+        plt.suptitle('BVAE Reconstruction vs Ground Truth (Snapshot 1)')
+        plt.savefig(runner.paths_bib.fig_dir + 'bvae_reconstruction_comparison.png', dpi=600)
+        plt.close()
+
+
+
     
+    if runner.config['latent_type'] in ['dls', 'pod']:
+        nx = runner.l_config.nx
+        ny = runner.l_config.ny
+        nx_t = runner.l_config.nx_t
+        ny_t = runner.l_config.ny_t
 
-    nx = runner.l_config.nx
-    ny = runner.l_config.ny
-    nx_t = runner.l_config.nx_t
-    ny_t = runner.l_config.ny_t
+        # point probe info
+        x = np.linspace(0, 1, nx)
+        y = np.linspace(0, 1, ny)
+        x = x[:nx_t]
+        y = y[:ny_t]
 
-    # point probe info
-    x = np.linspace(0, 1, nx)
-    y = np.linspace(0, 1, ny)
-    x = x[:nx_t]
-    y = y[:ny_t]
+        X, Y = np.meshgrid(x, y)
 
-    X, Y = np.meshgrid(x, y)
+        # load the ground truth data
+        print('Loading ground truth data...')
+        with h5py.File(runner.paths_bib.data_path, 'r') as f:
+            mean = f['mean'][:nx_t, :ny_t, :]
+            Q = f['UV'][:latent_length, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
+        print('Q shape:', Q.shape)
+        print('Data loaded.')
 
-    # load the ground truth data
-    print('Loading ground truth data...')
-    with h5py.File(runner.paths_bib.data_path, 'r') as f:
-        mean = f['mean'][:nx_t, :ny_t, :]
-        Q = f['UV'][:latent_length, :nx_t, :ny_t, :] - mean[np.newaxis, ...]
-    print('Q shape:', Q.shape)
-    print('Data loaded.')
+        # calculate the compression ratio
+        M = math.prod(Q.shape) 
+        T = latent_length
+        d = 2
+        p = runner.l_config.patch_size
+        m = runner.l_config.num_modes
+        if runner.config['latent_type'] == 'dls':
+            n = runner.l_config.num_gfem_nodes
+            CR = M / ( d * T * n * (m+1) + d * m * p**2)
+        else: 
+            CR = M / (T * m + m * p**2)
+        
 
-    # calculate the compression ratio
-    M = math.prod(Q.shape) 
-    T = latent_length
-    d = 2
-    p = runner.l_config.patch_size
-    m = runner.l_config.num_modes
-    if runner.config['latent_type'] == 'dls':
-        n = runner.l_config.num_gfem_nodes
-        CR = M / ( d * T * n * (m+1) + d * m * p**2)
-    else: 
-        CR = M / (T * m + m * p**2)
-    
-
-    print(f'Compression Ratio: {CR}')
+        print(f'Compression Ratio: {CR}')
 
     L2_error = np.sqrt(np.sum((Q-Q_rec)**2, axis=(1,2,3))) / np.sqrt(np.sum(Q**2, axis=(1,2,3)))
     L2_error_mean = L2_error.mean()
@@ -620,7 +716,7 @@ def latent_eval(runner):
 
     # save error metrics to latent_path h5
     with h5py.File(runner.paths_bib.latent_path, 'a') as f:
-        if 'CR' not in f.keys():
+        if 'CR' not in f.keys() and runner.config['latent_type'] in ['dls', 'pod']:
             f.create_dataset('CR', data=CR)
         if 'L2_error' not in f.keys():
             f.create_dataset('L2_error', data=L2_error)

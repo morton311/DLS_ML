@@ -127,7 +127,7 @@ class runner(nn.Module):
                     if total_snaps < train_snaps:
                         train_snaps = total_snaps
 
-                    train_len = int(total_snaps * train_split)
+                    train_len = int(train_snaps * train_split)
                     test_len = int(train_len * test_split)
 
                     train_indices = np.arange(0, train_len)

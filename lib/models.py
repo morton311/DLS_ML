@@ -608,11 +608,18 @@ def bvae_batch_encode(model, data_path, latent_path, device, config, batch_size=
         print(f"Loaded mean and std from {latent_scaler_path}")
 
     
+
+    
     # Load the data
     with h5py.File(data_path, 'r') as f: 
         num_samples = f['UV'].shape[0]
         data_shape = f['UV'].shape 
         num_batches = math.ceil(num_samples / batch_size)
+
+        l_config = bvae_latent_config(config, data_shape)
+        with open(latent_path.replace('.h5', '_config.pkl'), 'wb') as g:
+            pickle.dump(l_config, g)
+        print(f"Latent configuration saved to {latent_path.replace('.h5', '_config.pkl')}")
 
         data_mean = f['mean'][:]
 
@@ -645,10 +652,7 @@ def bvae_batch_encode(model, data_path, latent_path, device, config, batch_size=
                     l['dofs'][snap_start:snap_end, :] = encoded_data.cpu().numpy()
     
     print(f"Latent space saved to {latent_path}")
-    l_config = bvae_latent_config(config, data_shape)
-    with open(latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
-        pickle.dump(l_config, f)
-    print(f"Latent configuration saved to {latent_path.replace('.h5', '_config.pkl')}")
+    
 
 
 class bvae_latent_config:
@@ -733,3 +737,4 @@ def bvae_batch_decode(model, dofs, rec_path, data_path, latent_path, device, bat
             sys.stdout.write('\n')
             sys.stdout.flush()
 
+    
