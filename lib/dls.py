@@ -558,9 +558,29 @@ def latent_eval(runner):
             print('Data shape:', Q_rec.shape)
             print('Data reconstructed.')
 
+            # save images of the modes to figs/latent_modes/
+            from matplotlib import pyplot as plt
+            import os
+            os.makedirs(runner.paths_bib.fig_dir + 'latent_modes/', exist_ok=True)
+            print('Saving POD modes...')
+            for i in range(0, runner.config['latent_params']['num_modes']):
+                
+                pod_mode = modes[:, i].reshape((runner.l_config.nx_t, runner.l_config.ny_t, 2))
+                umax = np.max(np.abs(pod_mode[:,:,0]))
+                vmax = np.max(np.abs(pod_mode[:,:,1]))
+                fig, ax = plt.subplots(1,2, figsize=(8,4))
+                im0 = ax[0].imshow(pod_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
+                ax[0].set_title(f'POD Mode {i+1} - u')
+                im1 = ax[1].imshow(pod_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
+                ax[1].set_title(f'POD Mode {i+1} - v')
+                
+                plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/pod_mode_{i+1}.png', dpi=600)
+                plt.close()
+
         elif runner.config['latent_type'] == 'bvae':
             from matplotlib import pyplot as plt
             import os
+            
             latent_dim = runner.config['latent_params']['latent_dim']
             print('Getting latent data')
             latent_length = f['dofs'].shape[0]
@@ -570,11 +590,23 @@ def latent_eval(runner):
             print('dofs shape:', dofs.shape)
 
             print('Loading BVAE model')
-            bvae = models.bvae_model(latent_dim)
+            data_shape = [runner.l_config.num_vars, runner.l_config.nx_t, runner.l_config.ny_t]
+            bvae = models.bvae_model(data_shape, runner.config)
             bvae.load_state_dict(torch.load(runner.paths_bib.latent_model_path, weights_only=True))
             bvae.to(runner.device)
 
             bvae.eval()
+
+            print('Calculating BVAE mode order and cumulative energy...')
+
+            if latent_dim <= 10:
+                order, Ecum = models.bvae_mode_order(bvae, runner.paths_bib.data_path, runner.paths_bib.latent_path, runner.config, runner.device)
+
+                for i in range(len(Ecum)):
+                    print(f'BVAE mode {i+1}, Cumulative Energy: {Ecum[i]:.4f}')
+            else:
+                order = list(range(latent_dim))
+                print('Latent dimension > 10, skipping mode order calculation.')
 
             print('Reconstructing data...')
 
@@ -596,9 +628,9 @@ def latent_eval(runner):
             os.makedirs(runner.paths_bib.fig_dir + 'latent_modes/', exist_ok=True)
 
             print('Saving BVAE modes...')
-            for i in range(latent_dim):
+            for i, ind in enumerate(order):
                 z = torch.zeros(latent_dim)
-                z[i] = 1
+                z[ind] = 1
                 z = z.to(runner.device)
                 bvae_mode = models.bvae_decode(bvae, z.unsqueeze(0), runner.device)
                 bvae_mode = bvae_mode.cpu().detach().numpy().squeeze().transpose(1,2,0)
@@ -607,13 +639,36 @@ def latent_eval(runner):
                 umax = np.max(np.abs(bvae_mode[:,:,0]))
                 vmax = np.max(np.abs(bvae_mode[:,:,1]))
                 fig, ax = plt.subplots(1,2, figsize=(8,4))
-                im0 = ax[0].imshow(bvae_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower')
+                im0 = ax[0].imshow(bvae_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
                 ax[0].set_title(f'BVAE Mode {i+1} - u')
-                im1 = ax[1].imshow(bvae_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+                im1 = ax[1].imshow(bvae_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
                 ax[1].set_title(f'BVAE Mode {i+1} - v')
                 
                 plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/bvae_mode_{i+1}.png', dpi=600)
                 plt.close()
+
+            # # Plot difference between BVAE mode and POD mode if POD modes are available
+            # pod_path = 'results/' + runner.config['data_name'] + '/pod/'
+            # if os.path.exists(pod_path + 'latent_coeff.h5'):
+            #     with h5py.File(pod_path + 'latent_coeff.h5', 'r') as f:
+            #         if 'modes' in f.keys():
+            #             pod_modes = f['modes'][:, :latent_dim]
+            #             for i in range(5):
+            #                 pod_mode = pod_modes[:, i+1].reshape((runner.l_config.nx_t, runner.l_config.ny_t, 2))
+            #                 print(f'POD mode {i+1} max:', np.max(np.abs(pod_mode)))
+            #                 pod_mode = pod_mode / np.max(np.abs(pod_mode.flatten()))
+            #                 bvae_mode = bvae_modes[i] / np.max(np.abs(bvae_modes[i].flatten()))
+            #                 diff_mode = bvae_mode - pod_mode
+            #                 umax = np.max(np.abs(diff_mode[:,:,0]))
+            #                 vmax = np.max(np.abs(diff_mode[:,:,1]))
+            #                 fig, ax = plt.subplots(1,2, figsize=(8,4))
+            #                 im0 = ax[0].imshow(diff_mode[:,:,0], cmap='Greys', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
+            #                 ax[0].set_title(f'BVAE - POD Mode {i+1} - u')
+            #                 im1 = ax[1].imshow(diff_mode[:,:,1], cmap='Greys', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
+            #                 ax[1].set_title(f'BVAE - POD Mode {i+1} - v')
+                            
+            #                 plt.savefig(runner.paths_bib.fig_dir + f'diff_latent_modes/bvae_pod_diff_mode_{i+1}.png', dpi=600)
+            #                 plt.close()
 
     if runner.config['latent_type'] == 'bvae':
         with h5py.File(runner.paths_bib.latent_path, 'a') as f:
@@ -635,13 +690,13 @@ def latent_eval(runner):
         # save reconstruction comparison to ground truth for first snapshot
         fig, ax = plt.subplots(2, 2, figsize=(8,8))
         vmax = np.max(np.abs(Q[0,:,:,:]))
-        im0 = ax[0,0].imshow(Q[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        im0 = ax[0,0].imshow(Q[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
         ax[0,0].set_title('Ground Truth - u')
-        im1 = ax[0,1].imshow(Q[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        im1 = ax[0,1].imshow(Q[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
         ax[0,1].set_title('Ground Truth - v')
-        im2 = ax[1,0].imshow(Q_rec[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        im2 = ax[1,0].imshow(Q_rec[0,:,:,0], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
         ax[1,0].set_title('Reconstruction - u')
-        im3 = ax[1,1].imshow(Q_rec[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower')
+        im3 = ax[1,1].imshow(Q_rec[0,:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
         ax[1,1].set_title('Reconstruction - v')
         plt.colorbar(im3, ax=ax, orientation='vertical', fraction=.1, shrink=0.8)
         plt.suptitle('BVAE Reconstruction vs Ground Truth (Snapshot 1)')
@@ -712,6 +767,12 @@ def latent_eval(runner):
 
     print(f'TKE Error: {100*tke_error:.4f}%')
 
+    RMS = np.sqrt(np.mean(Q**2, axis=0))
+    RMS_rec = np.sqrt(np.mean(Q_rec**2, axis=0))
+    RMS_error = np.sqrt(np.sum((RMS - RMS_rec)**2)) / np.sqrt(np.sum(RMS**2))
+
+    print(f'RMS Error: {100*RMS_error:.4f}%')
+
     print('Saving error metrics to latent_path...')
 
     # save error metrics to latent_path h5
@@ -728,6 +789,8 @@ def latent_eval(runner):
             f.create_dataset('vort_error_mean', data=vort_error_mean)
         if 'tke_error' not in f.keys():
             f.create_dataset('tke_error', data=tke_error)
+        if 'RMS_error' not in f.keys():
+            f.create_dataset('RMS_error', data=RMS_error)
 
     
     

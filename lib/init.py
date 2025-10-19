@@ -12,9 +12,12 @@ class pathsBib:
         if config['latent_type'] == 'dls':
             self.latent_id = 'dls_p'  + str(config['latent_params']['patch_size']) + 'm' + str(config['latent_params']['num_modes'])
         elif config['latent_type'] == 'bvae':
-            self.latent_id = 'bvae_l' + str(config['latent_params']['latent_dim']) + '_b' + str(config['latent_params']['beta'])
+            filters_str = '_'.join(str(f) for f in config['latent_params']['filters'])
+            lins_str = '_'.join(str(l) for l in config['latent_params']['linear'])
+            
+            self.latent_id = 'bvae_l' + str(config['latent_params']['latent_dim']) + '_b' + str(config['latent_params']['beta']) + '_f_' + filters_str + '_lin_' + lins_str
         else:
-            self.latent_id = 'pod'
+            self.latent_id = 'pod' # + str(config['latent_params']['num_modes'])
         self.latent_id = self.latent_id.replace('.', '_')
         
         self.latent_dir = 'results/' + config['data_name'] + '/' + self.latent_id + '/'

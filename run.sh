@@ -1,34 +1,14 @@
 #!/bin/bash
 
-# python -u main.py -c 're30k_6ktrain' -m 'eval'
-# echo "Evaluation for re30k_6ktrain completed."
-# python -u main.py -c 're30k' -m 'eval'
-# echo "Evaluation for re30k completed."
-# python -u main.py -c 're15k' -m 'eval'
-# echo "Evaluation for re15k completed."
-# python -u main.py -c 're15k' -m 'anim'
-# echo "Animation for re15k completed."
 
+# python -u main.py -c 'plate/bvae/bvae_plate_same_params.json' -m 'latent'
+# python -u main.py -c 're30k/pod/pod_f_extrap_100mode.json' -m 'latent'
+# python -u main.py -c 're30k/pod/pod_f_extrap_100mode.json' -m 'train'
+# python -u main.py -c 're30k/pod/pod_f_extrap_100mode.json' -m 'pred'
+# python -u main.py -c 're30k/pod/pod_f_extrap_100mode.json' -m 'eval'
 
-# python -u main.py -c 're30k_p49_m5' -m 'pred'
-# python -u main.py -c 're30k_p49_m5' -m 'eval'
-# python -u main.py -c 're30k_p49_m5' -m 'anim'
+python -u main.py -c 're15k/compare.json'
 
-# python -u main.py -c 'tuned_try2_pod_re15k' -m 'train'
-# python -u main.py -c 'tuned_try2_pod_re15k' -m 'pred'
-# python -u main.py -c 'tuned_try2_pod_re15k' -m 'eval'
-# python -u main.py -c 'tuned_try2_pod_re15k' -m 'latent'
-# python -u main.py -c 'tuned_try2_pod_re15k' -m 'anim'
+# python -u main.py -c 're15k/pod/pod_f_extrap_100mode.json' -m 'eval'
+# python -u main.py -c 're15k/pod/pod_f_extrap_100mode.json' -m 'anim'
 
-
-# python -u main.py -c 'bvae_case1_re15k' -m 'train'
-# python -u main.py -c 'bvae_case1_re15k' -m 'pred'
-# python -u main.py -c 'bvae_case1_re15k' -m 'eval'
-# python -u main.py -c 'bvae_case1_re15k' -m 'latent'
-# python -u main.py -c 'bvae_case1_re15k' -m 'anim' 
-
-python -u main.py -c 'bvae_case_2_re30k' -m 'train'
-python -u main.py -c 'bvae_case_2_re30k' -m 'latent'
-python -u main.py -c 'bvae_case_2_re30k' -m 'pred'
-python -u main.py -c 'bvae_case_2_re30k' -m 'eval'
-# python -u main.py -c 'bvae_case_2_re30k' -m 'anim' 

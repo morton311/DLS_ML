@@ -1,0 +1,33 @@
+{
+    "data_name":        "ldc_15k",
+
+    "latent_type":      "pod",
+
+    "latent_params": {
+        "patch_size":   0,
+        "num_modes":    100
+    },
+
+    "model":            "f_extrap",
+
+    "params": {
+        "time_lag":     1
+    },
+
+    "train": {
+        "train_split":  0.7,
+        "test_split":   0.1,
+        "sample_train": 0,
+        "sample_test":  0,
+        "train_ahead":  1
+    },
+
+    "predictions": {
+        "long":
+        {
+            "init":     "val",
+            "lim":      15000,
+            "arg":      "extrap"
+        }
+    }
+}

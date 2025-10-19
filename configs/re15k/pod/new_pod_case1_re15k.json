@@ -1,12 +1,11 @@
 {
-    "data_name":        "ldc_30k_60ksnaps",
+    "data_name":        "ldc_15k",
 
-    "latent_type":      "bvae",
+    "latent_type":      "pod",
 
     "latent_params": {
         "patch_size":   0,
-        "latent_dim":   50,
-        "beta":         0.01
+        "num_modes":    20
     },
 
     "model":            "tr_enc",
@@ -20,29 +19,28 @@
     },
 
     "train": {
-        "train_split":  0.06,
+        "train_split":  0.7,
         "test_split":   0.1,
         "sample_train": 0,
         "sample_test":  0,
         "lr":           0.001,
         "num_epochs":   1000,
         "patience":     25,
-        "train_ahead":  5,
+        "train_ahead":  1,
         "batch_size":   256
     },
-
-    "pred_lim":         512,
 
     "predictions": {
         "validation": {
             "init":     "val",
-            "lim":      512
+            "lim":      null
         },
         "seen": {
             "init":     "train",
-            "lim":      5000
+            "lim":      null
         },
-        "long": {
+        "long":
+        {
             "init":     "val",
             "lim":      15000,
             "arg":      "extrap"

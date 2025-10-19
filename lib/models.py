@@ -350,67 +350,115 @@ def predict(model, initial_input, time_lag, num_predictions, device):
     return predictions
 
 class bvae_encoder(nn.Module):
-    def __init__(self, latent_dim):
+    def __init__(self, data_shape, config):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=2, out_channels=8, kernel_size=3, stride=2, padding=1)
-        self.act1 = nn.ELU()
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, stride=2, padding=1)
-        self.act2 = nn.ELU()
-        self.conv3 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1)
-        self.act3 = nn.ELU()
-        self.conv4 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)
-        self.act4 = nn.ELU()
-        self.conv5 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)
-        self.act5 = nn.ELU()
-        self.conv6 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)
-        self.act6 = nn.ELU()
+        self.conv = nn.ModuleList([])
+        self.act = nn.ModuleList([])
+        self.pad = nn.ModuleList([])
+        self.width = [ data_shape[1] ]
+        self.height = [ data_shape[2] ]
+
+        for i, filters in enumerate(config['latent_params']['filters']):
+            if i == 0:
+                in_channels = data_shape[0]
+            else:
+                in_channels = config['latent_params']['filters'][i-1]
+            out_channels = filters
+            self.conv.append(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1))
+            self.act.append(nn.ELU())
+            width = np.floor((self.width[-1] - 1 ) / (2) + 1)
+            height = np.floor((self.height[-1] - 1) / (2) + 1)
+
+            if (width % 2 == 0) and (height % 2 == 0):
+                self.pad.append(nn.Identity())
+            elif width % 2 == 0 and height % 2 != 0:
+                self.pad.append(nn.ConstantPad2d((0,1,0,0), 0))
+                height += 1
+            elif width % 2 != 0 and height % 2 == 0:
+                self.pad.append(nn.ConstantPad2d((0,0,0,1), 0))
+                width += 1
+            else:
+                self.pad.append(nn.ConstantPad2d((0,1,0,1), 0))
+                width += 1
+                height += 1
+
+            self.width.append(width)
+            self.height.append(height)
+        
         self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(8*8*256, 512)
+        self.fc1 = nn.Linear(int(self.width[-1]*self.height[-1]*config['latent_params']['filters'][-1]), config['latent_params']['linear'][0])
         self.act7 = nn.ELU()
-        self.fc2 = nn.Linear(512, latent_dim * 2)
+        self.out = nn.Linear(config['latent_params']['linear'][0], config['latent_params']['latent_dim'] * 2) 
+
+        self.reshape_dim = [config['latent_params']['filters'][-1], int(self.width[-1]), int(self.height[-1])]
+
+        
+
+        print(self.width)
+        print(self.height)
+        for layer in self.pad:
+            print(type(layer))
 
     def forward(self, x):
-        x = self.act1(self.conv1(x))
-        x = self.act2(self.conv2(x))
-        x = self.act3(self.conv3(x))
-        x = self.act4(self.conv4(x))
-        x = self.act5(self.conv5(x))
-        x = self.act6(self.conv6(x))        
+        # print('Encoder arch')
+        # print(x.shape)
+        for conv, act, pad in zip(self.conv, self.act, self.pad):
+            x = act(conv(pad(x)))
+            # print(x.shape)
+            # print(type(pad))
         x = self.flatten(x)
         x = self.act7(self.fc1(x))
-        x = self.fc2(x)
+        x = self.out(x)
         return x
     
 class bvae_decoder(nn.Module):
-    def __init__(self, latent_dim):
+    def __init__(self, data_shape, config, encoder):
         super().__init__()
-        self.fc1 = nn.Linear(latent_dim, 512)
+        self.deconv = nn.ModuleList([])
+        self.act = nn.ModuleList([])
+        self.pad = nn.ModuleList([])
+        print(encoder.reshape_dim)
+        self.width = [encoder.reshape_dim[1]]
+        self.height = [encoder.reshape_dim[2]]
+        
+        for layer in reversed(encoder.pad):
+            if type(layer) == nn.Identity:
+                self.pad.append(nn.Identity())
+            else:
+                padding = tuple([-1*x for x in layer.padding])
+                print(layer.padding , padding)
+                self.pad.append(nn.ConstantPad2d(padding, 0))
+
+        self.input = nn.Linear(config['latent_params']['latent_dim'], config['latent_params']['linear'][0])
         self.act1 = nn.ELU()
-        self.fc2 = nn.Linear(512, 8*8*256)
+        self.fc2 = nn.Linear(config['latent_params']['linear'][0], int(math.prod(encoder.reshape_dim)))
         self.act2 = nn.ELU()
-        self.unflatten = nn.Unflatten(dim=1, unflattened_size=(256, 8, 8))
-        self.deconv1 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.act3 = nn.ELU()
-        self.deconv2 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.act4 = nn.ELU()
-        self.deconv3 = nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.act5 = nn.ELU()
-        self.deconv4 = nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.act6 = nn.ELU()
-        self.deconv5 = nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.act7 = nn.ELU()
-        self.deconv6 = nn.ConvTranspose2d(in_channels=8, out_channels=2, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.unflatten = nn.Unflatten(dim=1, unflattened_size=tuple(encoder.reshape_dim))
+        for i, filters in enumerate(reversed(config['latent_params']['filters'])):
+            if i == len(config['latent_params']['filters']) - 1:
+                out_channels = data_shape[0]
+            else:
+                out_channels = config['latent_params']['filters'][-(i+2)]
+            in_channels = filters
+            self.deconv.append(nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=2, padding=1, output_padding=1))
+
+            
+
+            if i < len(config['latent_params']['filters']) - 1:
+                self.act.append(nn.ELU())
+            else:
+                self.act.append(nn.Identity())
 
     def forward(self, x):
-        x = self.act1(self.fc1(x))
+        # print('Decoder arch')
+        x = self.act1(self.input(x))
         x = self.act2(self.fc2(x))
         x = self.unflatten(x)
-        x = self.act3(self.deconv1(x))
-        x = self.act4(self.deconv2(x))
-        x = self.act5(self.deconv3(x))
-        x = self.act6(self.deconv4(x))
-        x = self.act7(self.deconv5(x))
-        x = self.deconv6(x)
+        # print(x.shape)
+        for deconv, act, pad in zip(self.deconv, self.act, self.pad):
+            x = act(deconv(pad(x)))
+            # print(x.shape)
+            # print(type(pad))
         return x
 
 class bvae_model(nn.Module):
@@ -418,24 +466,19 @@ class bvae_model(nn.Module):
     A base class for a Bayesian Variational Autoencoder (BVAE) model.
     Convolutional encoder decoder model with reparameterization trick.
     """
-    def __init__(self, latent_dim):
+    def __init__(self, data_shape, config):
         super().__init__()
-        self.encoder = self.buildEncoder(latent_dim)
-        self.decoder = self.buildDecoder(latent_dim)
+        self.encoder = self.buildEncoder(data_shape, config)
+        self.decoder = self.buildDecoder(data_shape, config, self.encoder)
 
-    
-    def buildEncoder(self, latent_dim):
-        encoder = bvae_encoder(latent_dim)
+    def buildEncoder(self, data_shape, config):
+        encoder = bvae_encoder(data_shape, config)
         return encoder
-# width = [512]
-# for i in range(6):
-#     width.append( np.floor((width[-1] - 1) / (2) + 1) )
 
-    
-    def buildDecoder(self, latent_dim):
-
-        decoder = bvae_decoder(latent_dim)
+    def buildDecoder(self, data_shape, config, encoder):
+        decoder = bvae_decoder(data_shape, config, encoder)
         return decoder
+
     
     def sample(self, mean, logvariance):
         """
@@ -469,7 +512,27 @@ def bvae_loss(reconstruction, data, mean, logvariance, beta):
 
     return loss, MSE, KLD
 
-def train_bvae(model, train_loader, test_loader, optimizer, config):
+class betaScheduler:
+    """Schedule beta, linear growth to max value"""
+
+    def __init__(self, endvalue, startvalue=None, warmup=20):
+        if startvalue is None:
+            startvalue = endvalue / 5
+        self.startvalue = startvalue
+        self.endvalue = endvalue
+        self.warmup = warmup
+
+    def getBeta(self, epoch, prints=False):
+
+        if epoch < self.warmup:
+            beta = self.startvalue + (self.endvalue - self.startvalue) * epoch / self.warmup
+            if prints:
+                print(beta)
+            return beta
+        else:
+            return self.endvalue
+
+def train_bvae(model, train_loader, test_loader, optimizer, config, scheduler=None, beta_scheduler=None):
 
     best_test_loss = float('inf')
     early_stop_counter = 0
@@ -479,9 +542,11 @@ def train_bvae(model, train_loader, test_loader, optimizer, config):
     num_epochs = config['train']['num_epochs']
     beta = config['latent_params']['beta']
 
+    lr_now = 0
+
     # Training loop
     start_time = time.time()
-    best_model = None
+    best_model = copy.deepcopy(model.state_dict())
     best_epoch = 0
 
     for epoch in range(num_epochs):
@@ -499,9 +564,16 @@ def train_bvae(model, train_loader, test_loader, optimizer, config):
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
+        
             logVar_batch.append(np.exp(0.5* np.mean(logvariance.detach().cpu().numpy(), 0)))
         losses.append(epoch_loss / len(train_loader))
-        
+
+        if scheduler is not None:
+            scheduler.step()
+            lr_now = scheduler.get_last_lr()
+
+        if beta_scheduler is not None:
+            beta = beta_scheduler.getBeta(epoch)
         ## --------------------------------------- Test ---------------------------------------
         # Evaluate the model on the test set
         model.eval()
@@ -536,7 +608,7 @@ def train_bvae(model, train_loader, test_loader, optimizer, config):
 
         best_flag = 'X' if (epoch + 1) == best_epoch else ' '
         mode_collapse = (np.mean(np.stack(logVar_batch, axis=0), 0) < 0.1).sum()
-        print(f"| Epoch: {epoch+1:<4}/{config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:8.6f} | Test Loss: {test_losses[-1]:8.6f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{config['train']['patience']} | Mode Collapsed: {mode_collapse:<3}/{config['latent_params']['latent_dim']:<3} |")
+        print(f"| Epoch: {epoch+1:<4}/{config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:8.6f} | Test Loss: {test_losses[-1]:8.6f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{config['train']['patience']} | Mode Collapsed: {mode_collapse:<3}/{config['latent_params']['latent_dim']:<3} | LR: {lr_now[0]:.6f} | Beta: {beta:.4f} |")
     end_time = time.time()
     print('Time taken for training: ', end_time - start_time)
     print('Time taken per epoch: ', (end_time - start_time) / num_epochs)
@@ -737,4 +809,75 @@ def bvae_batch_decode(model, dofs, rec_path, data_path, latent_path, device, bat
             sys.stdout.write('\n')
             sys.stdout.flush()
 
+
+
+def bvae_mode_order(model, data_path, latent_path, config, device):
+    import h5py
+    with h5py.File(latent_path, 'r') as f:
+        num_snaps = f['dofs'].shape[0]
+        if num_snaps > 1000:
+            num_snaps = 1000
+        dofs = f['dofs'][:num_snaps, :]
+        latent_dim = f['dofs'].shape[1]
+    with h5py.File(data_path, 'r') as f:
+        mean = f['mean'][:]
+        Q = f['UV'][:num_snaps] - mean[np.newaxis, ...]
     
+    with open(latent_path.replace('coeff.h5', 'scaler.pkl'), 'rb') as f:
+        scaler_mean, scaler_std = pickle.load(f)
+    
+    m = np.zeros(latent_dim, dtype=int)
+    n = np.arange(latent_dim)
+    Ecum = []
+    partialModes = np.zeros_like(dofs, dtype=np.float32)
+
+    for i in range(latent_dim):
+        Eks = []
+        for j in n:  # for mode in remaining modes
+            start = time.time()
+            print(m[:i], j, end="")
+            partialModes *= 0
+            partialModes[:, m[:i]] = dofs[:, m[:i]]
+            partialModes[:, j] = dofs[:, j]
+            Q_pred = model.decoder(torch.tensor(partialModes, dtype=torch.float32).to(device))
+            Q_pred = Q_pred.cpu().detach().numpy().transpose(0,2,3,1)
+            Q_pred = denormalize_data(Q_pred, scaler_mean, scaler_std)
+            Eks.append(get_Ek(Q, Q_pred))
+            elapsed = time.time() - start
+            print(f' : Ek={Eks[-1]:.4f}, elapsed: {elapsed:.2f}s')
+        Eks = np.array(Eks).squeeze()
+        ind = n[np.argmax(Eks)]
+        m[i] = ind
+        n = np.delete(n, np.argmax(Eks))
+        Ecum.append(np.max(Eks))
+        print('Adding: ', ind, ', Ek: ', np.max(Eks))
+        print('#'*30)
+    Ecum = np.array(Ecum)
+    print(f"Rank finished, the rank is {m}")
+    print(f"Cumulative Ek is {Ecum}")
+
+    return np.array(m), Ecum
+
+def get_Ek(original, rec):
+    
+    """
+    Calculate energy percentage reconstructed
+    
+    Args:   
+            original : (NumpyArray) The ground truth 
+
+            rec      : (NumpyArray) The reconstruction from decoder
+
+    Returns:  
+
+            The energy percentage for construction. Note that it is the Ek/100 !!
+    """
+
+    import numpy as np 
+
+    TKE_real = original[..., 0] ** 2 + original[..., 1] ** 2
+
+    u_rec = rec[..., 0]
+    v_rec = rec[..., 1]
+
+    return 1 - np.sum((original[..., 0] - u_rec) ** 2 + (original[..., 1] - v_rec) ** 2) / np.sum(TKE_real)

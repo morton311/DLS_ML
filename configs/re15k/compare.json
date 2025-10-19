@@ -1,0 +1,26 @@
+{
+    "comparisons": [
+        {
+            "config_file": "re15k/dls/p49_m10_re15k_ta5.json",
+            "result_key": "long",
+            "label": "DLS",
+            "line_style": "dashed",
+            "color": "C0"
+        },
+        {
+            "config_file": "re15k/pod/pod_case2_re15k.json",
+            "result_key": "long",
+            "label": "200 Mode POD",
+            "line_style": "dotted",
+            "color": "C1"
+        },
+        {
+            "config_file": "re15k/pod/pod_f_extrap_100mode.json",
+            "result_key": "long",
+            "label": "Extrapolation",
+            "line_style": "dashdot",
+            "color": "C2"
+        }
+    ],
+    "save_dir": "results/ldc_15k/comparisons"
+}

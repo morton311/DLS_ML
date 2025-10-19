@@ -26,10 +26,26 @@ class runner(nn.Module):
     def __init__(self, config):
         super(runner, self).__init__()
         self.config = config
+        if config['latent_type'] == 'bvae':
+            # check if config["latent_params"] has necessary keys
+            required_keys = ['latent_dim', 'beta']
+            for key in required_keys:
+                if key not in config['latent_params']:
+                    raise ValueError(f"Key '{key}' not found in config['latent_params']")
+            l_defaults = {
+                'filters': [8, 16, 32, 64, 128, 256],
+                'linear': [512],
+                'pos_emb': False
+            }
+            for key, value in l_defaults.items():
+                self.config['latent_params'].setdefault(key, value)
+            
         self.device = config['device']
         self.paths_bib = self._init_paths_and_logging(config)
 
         self._log_config()
+
+        
 
         # get model info
         self._get_data()
@@ -40,13 +56,14 @@ class runner(nn.Module):
     def _init_paths_and_logging(self, config):
         is_init_path, paths = init.init_path(config)
 
-        if config['log'] == 'file':
-            sys.stdout = open(paths.log_path, 'w')
-            sys.stderr = open(paths.log_path, 'a')
+        if config['mode'] != 'compare':
+            if config['log'] == 'file':
+                sys.stdout = open(paths.log_path, 'w')
+                sys.stderr = open(paths.log_path, 'a')
         
 
         print(f'Using device: {self.device}')
-        if is_init_path:
+        if is_init_path and config['mode'] != 'compare':
             DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=4)
         return paths
 
@@ -99,8 +116,8 @@ class runner(nn.Module):
         elif self.config['latent_type'] == 'pod':
             with h5py.File(self.paths_bib.data_path, 'r') as f:
                 mean = f['mean'][:]
-                data = f['UV'][:2500:2] - mean[np.newaxis, ...]
-            modes, eigVal, latent_config = pod.pod_mode_find(data)
+                data = f['UV'][:] - mean[np.newaxis, ...]
+            modes, eigVal, latent_config = pod.pod_mode_find(data, self.config)
 
             with h5py.File(self.paths_bib.latent_path, 'w') as f:
                 f.create_dataset('eigVal', data=eigVal)
@@ -112,7 +129,10 @@ class runner(nn.Module):
                 pickle.dump(latent_config, f)
 
         elif self.config['latent_type'] == 'bvae':
-            bvae = models.bvae_model(latent_dim=self.config['latent_params']['latent_dim'])
+            with h5py.File(self.paths_bib.data_path, 'r') as f:
+                data = f['UV'][0]
+                data_shape = data.transpose(2, 0, 1).shape
+            bvae = models.bvae_model(data_shape, self.config)
             bvae.to(self.device)
 
             if not os.path.exists(self.paths_bib.latent_model_path) and not self.config['overwrite'] in ['l', 'm']:
@@ -148,6 +168,8 @@ class runner(nn.Module):
                     test_set = datas.normalize_data(test_set, train_mean, train_std)
 
                 print(f"Train set shape: {train_set.shape}, Test set shape: {test_set.shape}")
+                print(f"Train set mean: {np.mean(train_set)}, Train set std: {np.std(train_set)}")
+                print(f"Train set min: {np.min(train_set)}, Train set max: {np.max(train_set)}")
 
                 train_set = train_set.transpose(0, 3, 1, 2)  # [S, C, H, W]
                 test_set = test_set.transpose(0, 3, 1, 2)    # [S, C, H, W]
@@ -159,6 +181,7 @@ class runner(nn.Module):
                     batch_size=self.config['latent_params'].get('batch_size', 256),
                     shuffle=True
                 )
+
                 test_loader = datas.make_dataloader(
                     torch.from_numpy(test_set).float().to(self.device),
                     torch.from_numpy(test_set).float().to(self.device),
@@ -169,13 +192,23 @@ class runner(nn.Module):
 
                 # create optimizer
                 optimizer = torch.optim.Adam(bvae.parameters(), lr=self.config['latent_params'].get('lr', 2e-4))
+                scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
+                                            max_lr=self.config['latent_params'].get('lr', 2e-4),
+                                            total_steps=self.config['latent_params'].get('num_epochs', 1000),
+                                            div_factor=2, 
+                                            final_div_factor=self.config['latent_params'].get('lr', 2e-4)
+                                                            /self.config['latent_params'].get('lr_end', 1e-5),
+                                            pct_start=0.2)
+                beta_scheduler = models.betaScheduler(self.config['latent_params']['beta'])
 
                 bvae, losses = models.train_bvae(
-                    model=bvae,
+                    model=bvae.to('cuda'),
                     train_loader=train_loader,
                     test_loader=test_loader,
                     optimizer=optimizer,
-                    config=self.config
+                    config=self.config,
+                    scheduler=scheduler,
+                    beta_scheduler=beta_scheduler
                 )
 
                 # Save model and losses
@@ -296,13 +329,17 @@ class runner(nn.Module):
                         num_layers=self.config['params']['num_layers'],
                         batch_size= self.config['train']['batch_size'],
                         ).to(self.device)
+            
+        elif self.config['model'] == 'f_extrap':
+            self.model = None
         else:
             raise ValueError(f"Model {self.config['model']} not recognized. Please use 'tr_enc' or 'lstm'.")
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
             self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
-        print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
+        if self.model != None:
+            print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
 
     def _compile_model(self):
@@ -311,51 +348,58 @@ class runner(nn.Module):
         """
         # Define the loss function and optimizer
         print(f"{'#'*20}\t{'Compiling model...':<20}\t{'#'*20}")
-        
-        self.criterion = nn.MSELoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
 
-        print(f"Loss function: {self.criterion}")
-        print(f"Optimizer: {self.optimizer}")
+        if self.model != None: 
+            
+            self.criterion = nn.MSELoss()
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.99)
 
-        # Helper function to remap 'embed' keys to 'input_projection'
-        def remap_embed_keys(state_dict):
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                if k.startswith('embed'):
-                    new_k = k.replace('embed', 'input_projection', 1)
-                    new_state_dict[new_k] = v
-                else:
-                    new_state_dict[k] = v
-            return new_state_dict
+            print(f"Loss function: {self.criterion}")
+            print(f"Optimizer: {self.optimizer}")
 
-        # if checkpoint file exists, model doesn't exist, and overwrite is not set to 'l' or 'm', load the checkpoint
-        check_flag = os.path.exists(self.paths_bib.checkpoint_path)
-        model_flag = os.path.exists(self.paths_bib.model_path)
-        if check_flag and not model_flag and not self.config['overwrite'] in ['l', 'm']: 
-            print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
-            checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
-            checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.epoch = checkpoint['epoch']
-            self.losses = checkpoint['losses']
-            self.test_losses = checkpoint['test_losses']
-            self.early_stop_counter = checkpoint['early_stop_counter']
-            print(f"Checkpoint loaded")
-            self.checkpointed = True
+            # Helper function to remap 'embed' keys to 'input_projection'
+            def remap_embed_keys(state_dict):
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    if k.startswith('embed'):
+                        new_k = k.replace('embed', 'input_projection', 1)
+                        new_state_dict[new_k] = v
+                    else:
+                        new_state_dict[k] = v
+                return new_state_dict
 
-        # if model exists and overwrite is not set to 'l' or 'm', load the model and skip training
-        elif model_flag and not self.config['overwrite'] in ['l', 'm']:
-            print(f"Model already exists at {self.paths_bib.model_path}. Skipping training.")
-            print(f"Loading model weights from {self.paths_bib.model_path}")
-            state_dict = torch.load(self.paths_bib.model_path, weights_only=True)
-            state_dict = remap_embed_keys(state_dict)
-            self.model.load_state_dict(state_dict)
-            self.checkpointed = False
-        else:
-            print(f"Model does not exist at {self.paths_bib.model_path}. Training from scratch.")
-            self.checkpointed = False
+            # if checkpoint file exists, model doesn't exist, and overwrite is not set to 'l' or 'm', load the checkpoint
+            check_flag = os.path.exists(self.paths_bib.checkpoint_path)
+            model_flag = os.path.exists(self.paths_bib.model_path)
+            if check_flag and not model_flag and not self.config['overwrite'] in ['l', 'm']: 
+                print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
+                checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
+                checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
+                self.model.load_state_dict(checkpoint['model_state_dict'])
+                self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'lr_scheduler_state_dict' in checkpoint:
+                    self.scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
+                else: 
+                    self.scheduler = None
+                self.epoch = checkpoint['epoch']
+                self.losses = checkpoint['losses']
+                self.test_losses = checkpoint['test_losses']
+                self.early_stop_counter = checkpoint['early_stop_counter']
+                print(f"Checkpoint loaded")
+                self.checkpointed = True
+
+            # if model exists and overwrite is not set to 'l' or 'm', load the model and skip training
+            elif model_flag and not self.config['overwrite'] in ['l', 'm']:
+                print(f"Model already exists at {self.paths_bib.model_path}. Skipping training.")
+                print(f"Loading model weights from {self.paths_bib.model_path}")
+                state_dict = torch.load(self.paths_bib.model_path, weights_only=True)
+                state_dict = remap_embed_keys(state_dict)
+                self.model.load_state_dict(state_dict)
+                self.checkpointed = False
+            else:
+                print(f"Model does not exist at {self.paths_bib.model_path}. Training from scratch.")
+                self.checkpointed = False
 
 
     def train(self):
@@ -372,278 +416,333 @@ class runner(nn.Module):
         """
         Get training and test data as torch tensors, minimizing memory usage.
         """
-        print('Getting training and test data')
-        tl = self.config['params']['time_lag']
-        ta = self.config['train']['train_ahead']
-        dof_dim = self.config['params']['input_dim']
-        with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            if self.config['latent_type'] == 'dls':
-                dof_u = f['dof_u']
-                dof_v = f['dof_v']
-                # Compute mean and std using only the training indices, in chunks to save memory
-                dofs = torch.zeros(len(self.train_indices), dof_dim)
+        if self.model != None:
+            print('Getting training and test data')
+            tl = self.config['params']['time_lag']
+            ta = self.config['train']['train_ahead']
+            dof_dim = self.config['params']['input_dim']
+            with h5py.File(self.paths_bib.latent_path, 'r') as f:
+                if self.config['latent_type'] == 'dls':
+                    dof_u = f['dof_u']
+                    dof_v = f['dof_v']
+                    # Compute mean and std using only the training indices, in chunks to save memory
+                    dofs = torch.zeros(len(self.train_indices), dof_dim)
+                    for i, idx in enumerate(self.train_indices):
+                        u = torch.from_numpy(dof_u[idx:idx+1]).float()
+                        v = torch.from_numpy(dof_v[idx:idx+1]).float()
+                        dofs[i] = torch.cat((u, v), dim=1)
+                elif self.config['latent_type'] == 'pod':
+                    dofs_not_scaled = f['dofs']
+                    dofs = torch.zeros(len(self.train_indices), dof_dim)
+                    for i, idx in enumerate(self.train_indices):
+                        dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+
+                elif self.config['latent_type'] == 'bvae':
+                    dofs_not_scaled = f['dofs']
+                    dofs = torch.zeros(len(self.train_indices), dof_dim)
+                    for i, idx in enumerate(self.train_indices):
+                        dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+
+                dof_mean = torch.mean(dofs, dim=0)
+                dof_std = torch.std(dofs, dim=0)
+
+                # print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
+
+                self.dof_mean = dof_mean
+                self.dof_std = dof_std
+
+                with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
+                    pickle.dump((dof_mean, dof_std), f)
+
+                # Helper to get normalized dof sequence as torch tensor
+                def get_dof_seq(idx, length, latent_type='dls'):
+                    if latent_type == 'dls':
+                        u = torch.from_numpy(dof_u[idx:idx+length]).float()
+                        v = torch.from_numpy(dof_v[idx:idx+length]).float()
+                        dof = torch.cat((u, v), dim=1)
+                    elif latent_type == 'pod':
+                        dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
+                    elif latent_type == 'bvae':
+                        dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
+                    dof = (dof - dof_mean) / dof_std
+                    return dof
+
+                # Prepare lists for X/Y, then stack at the end
+                X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
                 for i, idx in enumerate(self.train_indices):
-                    u = torch.from_numpy(dof_u[idx:idx+1]).float()
-                    v = torch.from_numpy(dof_v[idx:idx+1]).float()
-                    dofs[i] = torch.cat((u, v), dim=1)
-            elif self.config['latent_type'] == 'pod':
-                dofs_not_scaled = f['dofs']
-                dofs = torch.zeros(len(self.train_indices), dof_dim)
-                for i, idx in enumerate(self.train_indices):
-                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+                    dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
+                    X_train[i] = dof_seq[:tl]
+                    Y_train[i] = dof_seq[tl:tl+ta]
+                    if i % 500 == 0:
+                        print(f"Got train data {i}/{len(self.train_indices)}")
+                print('Got train data')
 
-            elif self.config['latent_type'] == 'bvae':
-                dofs_not_scaled = f['dofs']
-                dofs = torch.zeros(len(self.train_indices), dof_dim)
-                for i, idx in enumerate(self.train_indices):
-                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
-
-            dof_mean = torch.mean(dofs, dim=0)
-            dof_std = torch.std(dofs, dim=0)
-
-            # print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
-
-            self.dof_mean = dof_mean
-            self.dof_std = dof_std
-
-            with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
-                pickle.dump((dof_mean, dof_std), f)
-
-            # Helper to get normalized dof sequence as torch tensor
-            def get_dof_seq(idx, length, latent_type='dls'):
-                if latent_type == 'dls':
-                    u = torch.from_numpy(dof_u[idx:idx+length]).float()
-                    v = torch.from_numpy(dof_v[idx:idx+length]).float()
-                    dof = torch.cat((u, v), dim=1)
-                elif latent_type == 'pod':
-                    dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
-                elif latent_type == 'bvae':
-                    dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
-                dof = (dof - dof_mean) / dof_std
-                return dof
-
-            # Prepare lists for X/Y, then stack at the end
-            X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
-            for i, idx in enumerate(self.train_indices):
-                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
-                X_train[i] = dof_seq[:tl]
-                Y_train[i] = dof_seq[tl:tl+ta]
-                if i % 500 == 0:
-                    print(f"Got train data {i}/{len(self.train_indices)}")
-            print('Got train data')
-
-            X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
-            for i, idx in enumerate(self.test_indices):
-                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
-                X_test[i] = dof_seq[:tl]
-                Y_test[i] = dof_seq[tl:tl+ta]
-                if i % 100 == 0:
-                    print(f"Got test data {i}/{len(self.test_indices)}")
-            print('Got test data')
+                X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
+                for i, idx in enumerate(self.test_indices):
+                    dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
+                    X_test[i] = dof_seq[:tl]
+                    Y_test[i] = dof_seq[tl:tl+ta]
+                    if i % 100 == 0:
+                        print(f"Got test data {i}/{len(self.test_indices)}")
+                print('Got test data')
 
 
-        print(f"X_train shape: {X_train.shape}, Y_train shape: {Y_train.shape}, dtype: {X_train.dtype}")
-        print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}, dtype: {X_test.dtype}")
+            print(f"X_train shape: {X_train.shape}, Y_train shape: {Y_train.shape}, dtype: {X_train.dtype}")
+            print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}, dtype: {X_test.dtype}")
 
-        # convert to data loader
-        self.train_loader = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True)
-        print(f"Train loader created with {len(self.train_loader)} batches")
-        self.test_loader = datas.make_dataloader(X_test.to(self.device), Y_test.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=False)
-        print(f"Test loader created with {len(self.test_loader)} batches")
+            # convert to data loader
+            self.train_loader = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True)
+            print(f"Train loader created with {len(self.train_loader)} batches")
+            self.test_loader = datas.make_dataloader(X_test.to(self.device), Y_test.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=False)
+            print(f"Test loader created with {len(self.test_loader)} batches")
+
+
+        else:
+            dof_dim = self.config['params']['input_dim']
+            with h5py.File(self.paths_bib.latent_path, 'r') as f:
+                if self.config['latent_type'] == 'dls':
+                    raise NotImplementedError("DLS not implemented for f_extrap model")
+                elif self.config['latent_type'] == 'pod':
+                    dofs = f['dofs']
+                    X_train = dofs[self.train_indices, :dof_dim]
+                    X_test = dofs[self.test_indices, :dof_dim]
+
+                    dof_mean = np.mean(X_train, axis=0)
+                    dof_std = np.std(X_train, axis=0)
+
+                    self.dof_mean = dof_mean
+                    self.dof_std = dof_std
+
+                    with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
+                        pickle.dump((dof_mean, dof_std), f)
+
+                    self.train_loader = (X_train - dof_mean) / dof_std
+                    self.test_loader = (X_test - dof_mean) / dof_std
+
+
 
 
     def _model_fit(self):
         
-        if self.checkpointed:
-            best_epoch = self.epoch
-            losses = self.losses
-            test_losses = self.test_losses
-            best_model = copy.deepcopy(self.model.state_dict())
-            early_stop_counter = self.early_stop_counter
-            best_test_loss = min(test_losses)
-        else:
-            losses = []
-            test_losses = []
-            best_model = None
-            early_stop_counter = 0
-            best_test_loss = float('inf')
-            best_epoch = 0
+        if self.model != None:
+            if self.checkpointed:
+                best_epoch = self.epoch
+                losses = self.losses
+                test_losses = self.test_losses
+                best_model = copy.deepcopy(self.model.state_dict())
+                early_stop_counter = self.early_stop_counter
+                best_test_loss = min(test_losses)
+            else:
+                losses = []
+                test_losses = []
+                best_model = None
+                early_stop_counter = 0
+                best_test_loss = float('inf')
+                best_epoch = 0
 
-        start_time = time.time()
-        
-        max_norm = 0.2
-
-        for epoch in range(len(losses), self.config['train']['num_epochs']):
-            self.model.train()
-            epoch_loss = 0
-
-            ## --------------------------------------- Train ---------------------------------------
-            for inputs, targets in self.train_loader: 
-                inputs, targets = inputs, targets
-                self.optimizer.zero_grad()
-                total_loss = 0.0
-
-                for n in range(targets.shape[1]):
-                    # print(f"Step {n+1}/{targets.shape[1]}, VRAM usage: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                    target = targets[:, n, :]  # shape: [B, input_dim]
-
-                    # Forward pass
-                    outputs = self.model(inputs)  # shape: [B, input_dim]
-                    loss = self.criterion(outputs, target)
-
-                    # Backward and optimization for current step only
-                    total_loss += loss
-                    loss.backward()
-
-                    # Prepare input for next step
-                    inputs = torch.cat((inputs[:, 1:, :], outputs.detach().unsqueeze(1)), dim=1)
-
-                epoch_loss += total_loss.item() / targets.shape[1]
-
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
-                self.optimizer.step()
-
-            losses.append(epoch_loss / len(self.train_loader))
-
-            ## --------------------------------------- Test ---------------------------------------
-            # Evaluate the model on the test set
-            self.model.eval()
-            test_loss = 0
-            with torch.no_grad():
-                for inputs, targets in self.test_loader:
-                    inputs, targets = inputs, targets
-                    for n in range(targets.shape[1]):
-                        target = targets[:, n, :]
-                        outputs = self.model(inputs)
-                        loss = self.criterion(outputs, target)
-                        test_loss += loss.item() / targets.shape[1]
-                        inputs = torch.cat((inputs[:, 1:, :], outputs.unsqueeze(1)), dim=1)
-
-            test_losses.append(test_loss / len(self.test_loader))
+            start_time = time.time()
             
-            ## ------------------------------- Early stop and Checkpoint -------------------------------
-            # Early stopping and saving the best model
-            if epoch > 1:
-                if np.isnan(test_losses[-1]) or np.isnan(losses[-1]):
-                    print(f'NaN loss at epoch {epoch+1}. Stopping training.')
-                    self.model.load_state_dict(best_model)
-                    break
-                elif test_loss / len(self.test_loader) < best_test_loss:
-                    best_test_loss = test_loss / len(self.test_loader)
-                    best_model = copy.deepcopy(self.model.state_dict())
-                    best_epoch = epoch + 1
-                    # print(f'Best model saved at epoch {best_epoch} with test loss: {best_test_loss:.4f}')
-                    early_stop_counter = 0
-                else:
-                    early_stop_counter += 1
-                    if early_stop_counter >= self.config['train']['patience']:
-                        print(f'Early stopping at epoch {epoch+1}')
-                        self.model.load_state_dict(best_model)
-                        print(f'Best model loaded from epoch {best_epoch}, with test loss: {best_test_loss:.4f}')
-                        break
+            max_norm = 0.2
 
-                if (epoch + 1) % 5 == 0:
-                    # Save model checkpoint every 5 epochs
-                    # Save model losses, current weights, best weights, and optimizer state 
+            for epoch in range(len(losses), self.config['train']['num_epochs']):
+                self.model.train()
+                epoch_loss = 0
 
-                    torch.save({
-                        'epoch': epoch,
-                        'model_state_dict': self.model.state_dict(),
-                        'optimizer_state_dict': self.optimizer.state_dict(),
-                        'losses': losses,
-                        'test_losses': test_losses,
-                        'early_stop_counter': early_stop_counter,
-                        'best_model': best_model
-                    }, self.paths_bib.checkpoint_path)
-                    # print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
+                ## --------------------------------------- Train ---------------------------------------
+                for inputs, targets in self.train_loader: 
+                    inputs, targets = inputs, targets
+                    self.optimizer.zero_grad()
+                    total_loss = 0.0
+
+                    for n in range(targets.shape[1]):
+                        # print(f"Step {n+1}/{targets.shape[1]}, VRAM usage: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                        target = targets[:, n, :]  # shape: [B, input_dim]
+
+                        # Forward pass
+                        outputs = self.model(inputs)  # shape: [B, input_dim]
+                        loss = self.criterion(outputs, target)
+
+                        # Backward and optimization for current step only
+                        total_loss += loss
+                        loss.backward()
+
+                        # Prepare input for next step
+                        inputs = torch.cat((inputs[:, 1:, :], outputs.detach().unsqueeze(1)), dim=1)
+
+                    epoch_loss += total_loss.item() / targets.shape[1]
+
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
+                    self.optimizer.step()
+                    self.scheduler.step()
+
+                losses.append(epoch_loss / len(self.train_loader))
+
+                ## --------------------------------------- Test ---------------------------------------
+                # Evaluate the model on the test set
+                self.model.eval()
+                test_loss = 0
+                with torch.no_grad():
+                    for inputs, targets in self.test_loader:
+                        inputs, targets = inputs, targets
+                        for n in range(targets.shape[1]):
+                            target = targets[:, n, :]
+                            outputs = self.model(inputs)
+                            loss = self.criterion(outputs, target)
+                            test_loss += loss.item() / targets.shape[1]
+                            inputs = torch.cat((inputs[:, 1:, :], outputs.unsqueeze(1)), dim=1)
+
+                test_losses.append(test_loss / len(self.test_loader))
                 
-            best_flag = 'X' if (epoch + 1) == best_epoch else ' '
-            checkpoint_flag = 'X' if (epoch + 1) % 5 == 0 else ' '
-            print(f"| Epoch: {epoch+1:<4}/{self.config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:7.4f} | Test Loss: {test_losses[-1]:7.4f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{self.config['train']['patience']} | Checkpoint: {checkpoint_flag:<1} |")
+                ## ------------------------------- Early stop and Checkpoint -------------------------------
+                # Early stopping and saving the best model
+                if epoch > 1:
+                    if np.isnan(test_losses[-1]) or np.isnan(losses[-1]):
+                        print(f'NaN loss at epoch {epoch+1}. Stopping training.')
+                        self.model.load_state_dict(best_model)
+                        break
+                    elif test_loss / len(self.test_loader) < best_test_loss:
+                        best_test_loss = test_loss / len(self.test_loader)
+                        best_model = copy.deepcopy(self.model.state_dict())
+                        best_epoch = epoch + 1
+                        # print(f'Best model saved at epoch {best_epoch} with test loss: {best_test_loss:.4f}')
+                        early_stop_counter = 0
+                    else:
+                        early_stop_counter += 1
+                        if early_stop_counter >= self.config['train']['patience']:
+                            print(f'Early stopping at epoch {epoch+1}')
+                            self.model.load_state_dict(best_model)
+                            print(f'Best model loaded from epoch {best_epoch}, with test loss: {best_test_loss:.4f}')
+                            break
 
-        end_time = time.time()
-        print('\n\nTime taken for training: ', end_time - start_time)
-        print('Time taken per epoch: ', (end_time - start_time) / (epoch + 1))
+                    if (epoch + 1) % 5 == 0:
+                        # Save model checkpoint every 5 epochs
+                        # Save model losses, current weights, best weights, and optimizer state 
 
-        # Save the final model after training
-        torch.save(self.model.state_dict(), self.paths_bib.model_path)
-        print(f"Final model saved to {self.paths_bib.model_path}")
-        # Save the training and test losses
-        with open(self.paths_bib.model_dir + 'losses.pkl', 'wb') as f:
-            pickle.dump({'train_losses': losses, 'test_losses': test_losses}, f)
+                        torch.save({
+                            'epoch': epoch,
+                            'model_state_dict': self.model.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict(),
+                            'losses': losses,
+                            'test_losses': test_losses,
+                            'early_stop_counter': early_stop_counter,
+                            'best_model': best_model
+                        }, self.paths_bib.checkpoint_path)
+                        # print(f"Checkpoint saved at epoch {epoch+1} to {self.paths_bib.checkpoint_path}")
+                    
+                best_flag = 'X' if (epoch + 1) == best_epoch else ' '
+                checkpoint_flag = 'X' if (epoch + 1) % 5 == 0 else ' '
+                print(f"| Epoch: {epoch+1:<4}/{self.config['train']['num_epochs']:<4} | Train Loss: {losses[-1]:7.4f} | Test Loss: {test_losses[-1]:7.4f} | Best: {best_flag:<1} | Patience: {early_stop_counter:<3}/{self.config['train']['patience']} | Checkpoint: {checkpoint_flag:<1} |")
 
-        print(f"Training and test losses saved to {self.paths_bib.model_dir + 'losses.pkl'}")
+            end_time = time.time()
+            print('\n\nTime taken for training: ', end_time - start_time)
+            print('Time taken per epoch: ', (end_time - start_time) / (epoch + 1))
 
-        print('\nTraining complete')
+            # Save the final model after training
+            torch.save(self.model.state_dict(), self.paths_bib.model_path)
+            print(f"Final model saved to {self.paths_bib.model_path}")
+            # Save the training and test losses
+            with open(self.paths_bib.model_dir + 'losses.pkl', 'wb') as f:
+                pickle.dump({'train_losses': losses, 'test_losses': test_losses}, f)
+
+            print(f"Training and test losses saved to {self.paths_bib.model_dir + 'losses.pkl'}")
+
+            print('\nTraining complete')
+
+        else:
+            print("No training required for f_extrap model")
+            self.pred()
 
 
     def pred(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
 
-        time_lag = self.config['params']['time_lag']
-        with h5py.File(self.paths_bib.latent_path, 'r') as f:
-            if self.config['latent_type'] == 'dls':
-                num_snaps = f['dof_u'].shape[0]
-            elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
-                num_snaps = f['dofs'].shape[0]
-
-        for pred_name in self.config['predictions'].keys():
-            print(f"Predicting for {pred_name}")
-
-            pred_lim = self.config['predictions'][pred_name].get('lim', None)
-            if pred_lim is None:
-                pred_lim = np.inf
-
-            if self.config['predictions'][pred_name]['init'] == 'val':
-                idx = np.arange(self.val_indices[0], self.val_indices[0] + time_lag)
-                if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
-                    num_predictions = pred_lim
-                else:
-                    num_predictions = min(pred_lim, len(self.val_indices) - time_lag)
-
-            elif self.config['predictions'][pred_name]['init'] == 'train':
-                idx = np.arange(0, time_lag)
-                if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
-                    num_predictions = pred_lim
-                else:
-                    num_predictions = min(pred_lim, num_snaps - time_lag)
-
+        if self.model != None:
             
-
-            # get initial sequence
+            time_lag = self.config['params']['time_lag']
             with h5py.File(self.paths_bib.latent_path, 'r') as f:
                 if self.config['latent_type'] == 'dls':
-                    dof_u = f['dof_u'][idx]
-                    dof_v = f['dof_v'][idx]
-                    initial_input = np.concatenate((dof_u, dof_v), axis=1)
-                elif self.config['latent_type'] == 'pod':
-                    initial_input = f['dofs'][idx, :self.config['latent_params']['num_modes'] ]
-                elif self.config['latent_type'] == 'bvae':
-                    initial_input = f['dofs'][idx, :self.config['latent_params']['latent_dim'] ]
-            # print(f"Initial input shape: {initial_input.shape}")
+                    num_snaps = f['dof_u'].shape[0]
+                elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
+                    num_snaps = f['dofs'].shape[0]
 
-            # make predictions
-            pred = self._predict(initial_input, num_predictions=num_predictions)
-        
-            # split and save predictions
-            print(f"Saving predictions to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
-            if self.config['latent_type'] == 'dls':
-                pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
-                pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
+            for pred_name in self.config['predictions'].keys():
+                print(f"Predicting for {pred_name}")
 
-                with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
-                    f.create_dataset('dof_u', data=pred_dof_u)
-                    f.create_dataset('dof_v', data=pred_dof_v)
-                    f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
-            elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
+                pred_lim = self.config['predictions'][pred_name].get('lim', None)
+                if pred_lim is None:
+                    pred_lim = np.inf
+
+                if self.config['predictions'][pred_name]['init'] == 'val':
+                    idx = np.arange(self.val_indices[0], self.val_indices[0] + time_lag)
+                    if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
+                        num_predictions = pred_lim
+                    else:
+                        num_predictions = min(pred_lim, len(self.val_indices) - time_lag)
+
+                elif self.config['predictions'][pred_name]['init'] == 'train':
+                    idx = np.arange(0, time_lag)
+                    if 'extrap' in self.config['predictions'][pred_name].get('arg', ''):
+                        num_predictions = pred_lim
+                    else:
+                        num_predictions = min(pred_lim, num_snaps - time_lag)
+
                 
-                with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
-                    f.create_dataset('dofs', data=pred)
-                    f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
 
-            print(f"Saved!\n")
+                # get initial sequence
+                with h5py.File(self.paths_bib.latent_path, 'r') as f:
+                    if self.config['latent_type'] == 'dls':
+                        dof_u = f['dof_u'][idx]
+                        dof_v = f['dof_v'][idx]
+                        initial_input = np.concatenate((dof_u, dof_v), axis=1)
+                    elif self.config['latent_type'] == 'pod':
+                        initial_input = f['dofs'][idx, :self.config['latent_params']['num_modes'] ]
+                    elif self.config['latent_type'] == 'bvae':
+                        initial_input = f['dofs'][idx, :self.config['latent_params']['latent_dim'] ]
+                # print(f"Initial input shape: {initial_input.shape}")
 
-        # reconstruct the predictions
+                # make predictions
+                pred = self._predict(initial_input, num_predictions=num_predictions)
+            
+                # split and save predictions
+                print(f"Saving predictions to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
+                if self.config['latent_type'] == 'dls':
+                    pred_dof_u = pred[:, :self.config['params']['input_dim'] // 2]
+                    pred_dof_v = pred[:, self.config['params']['input_dim'] // 2:]
+
+                    with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                        f.create_dataset('dof_u', data=pred_dof_u)
+                        f.create_dataset('dof_v', data=pred_dof_v)
+                        f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
+                elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
+                    
+                    with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                        f.create_dataset('dofs', data=pred)
+                        f.create_dataset('idx', data=np.arange(idx[0], idx[0] + time_lag + num_predictions))
+
+                print(f"Saved!\n")
+
+        else:
+            print("Predicting using f_extrap model")
+            # load the pod latent coefficients
+            with h5py.File(self.paths_bib.latent_path, 'r') as f:
+                dofs = self.train_loader # already normalized
+                for pred_name in self.config['predictions'].keys():
+                    print(f"Predicting for {pred_name}")
+                    pred_lim = self.config['predictions'][pred_name].get('lim', 15000)
+                    pred = pod.freq_extrapolation(dofs, dt = 0.01, new_length=dofs.shape[0] + self.test_loader.shape[0] + pred_lim)
+                    # denormalize the predictions
+                    pred = (pred * self.dof_std) + self.dof_mean
+                    # save the predictions
+                    print(f"Saving predictions to {self.paths_bib.predictions_dir + pred_name + '_pred.h5'}")
+                    with h5py.File(self.paths_bib.predictions_dir + pred_name + '_pred.h5', 'w') as f:
+                        f.create_dataset('dofs', data=pred)
+                        f.create_dataset('idx', data=np.arange(0, pred.shape[0]))
+                    
+                    
+                
+
+
+            # reconstruct the predictions
         print(f"\nReconstructing all predictions")
         self._pred_rec()
 
@@ -772,7 +871,8 @@ class runner(nn.Module):
                     with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as f:
                         latent_config = pickle.load(f)
 
-                    bvae_model = models.bvae_model(self.config['latent_params']['latent_dim'])
+                    data_shape = [latent_config.num_vars, latent_config.nx_t, latent_config.ny_t]
+                    bvae_model = models.bvae_model(data_shape, self.config)
                     bvae_model.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True))
                     bvae_model.to(self.device)
 
@@ -795,7 +895,8 @@ class runner(nn.Module):
         """
         import lib.plotting as plots
         print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
-        self.model.eval()
+        if self.model != None:
+            self.model.eval()
         nx = self.l_config.nx
         ny = self.l_config.ny
         nx_t = self.l_config.nx_t
@@ -826,6 +927,7 @@ class runner(nn.Module):
         time_lag = self.config['params']['time_lag']
         true_path = self.paths_bib.data_path
         self.compute_TKE_true(true_path)
+
 
         # Load the predictions
         for pred_file in os.listdir(self.paths_bib.predictions_dir):
@@ -858,6 +960,7 @@ class runner(nn.Module):
 
                     if self.config['predictions'][pred_name].get('arg', '') == 'extrap':
                         true_idx = list(range(max(0, idx[0] - int(1*len_pred)), min(num_snaps, idx[0] + eval_len)))
+                        print(f"true_idx range: ", true_idx[0], true_idx[-1])
                         eval_idx = eval_idx - true_idx[0] # adjust eval_idx to start from truth t=0
                     else:
                         true_idx = eval_idx
@@ -882,31 +985,60 @@ class runner(nn.Module):
 
                 self.compute_TKE(pred_path)
                 self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
+                
 
-                # plot losses, RMS, TKE, Coherence
-                print(f'\nGenerating plots, saving')
-                plots.plot_loss(self)
-                print('Loss plot done')
-                plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
-                print('RMS plot done\n')
-                plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('TKE plot done')
-                plots.plot_PSDs(self, point_dict)
-                print('PSD plot done')
-                plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                print('Coherence plot done')
-                plots.plot_points(self)
-                print('Point plot done')
-                plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                print('Point data plot done')
-                if self.config['model'] == 'tr_enc':
-                    plots.attention_maps(self)
-                    print('Attention map plot done')
-                plots.plot_phase_portraits(self, point_dict)
-                plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
-                print('Spectrogram plot done')
-                plots.coeff_PDF(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                print('Coefficient PDF plot done\n\n')
+                if self.config['mode'] == 'compare':
+                    # Retrieve statistics from truth and predictions for saving as keys in self
+                    results = {}
+                    with h5py.File(true_path, 'r') as f_true, h5py.File(pred_path, 'r') as f_pred:
+                        
+                        results['tke_true'] = f_true[self.paths_bib.latent_id + '_tke_true'][:]
+                        results['tke_pred'] = f_pred['tke_pred'][:]
+                        results['rms_true'] = f_pred['rms_true'][:]
+                        results['rms_pred'] = f_pred['rms_pred'][:]
+                        results['point_dict'] = point_dict
+                        results['eval_idx'] = eval_idx
+                        results['true_idx'] = true_idx
+                        results['pred_idx'] = idx
+                        results['time_lag'] = time_lag
+                        
+
+                    results['X_grid'], results['Y_grid'] = X, Y 
+
+                    # save results to self
+                    self.results = results
+                    
+
+
+
+                else:
+                    # plot losses, RMS, TKE, Coherence
+                    print(f'\nGenerating plots, saving')
+                    if self.model != None:
+                        plots.plot_loss(self)
+                        print('Loss plot done')
+                    plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
+                    print('RMS plot done\n')
+                    plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                    print('TKE plot done')
+                    plots.plot_PSDs(self, point_dict)
+                    print('PSD plot done')
+                    plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Coherence plot done')
+                    plots.plot_points(self)
+                    print('Point plot done')
+                    plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Point data plot done')
+                    if self.config['model'] == 'tr_enc':
+                        plots.attention_maps(self)
+                        print('Attention map plot done')
+                    plots.plot_phase_portraits(self, point_dict)
+                    plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
+                    print('Spectrogram plot done')
+                    plots.coeff_PDF(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    plots.coeff_PDF_seaborn(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Coefficient PDF plot done\n\n')
+
                 
     def compute_TKE(self, pred_path, batch_size=1000):
         """
@@ -950,6 +1082,9 @@ class runner(nn.Module):
                 f_pred.create_dataset('tke_pred', data=tke_pred, dtype=np.float32)
 
         print(f"TKE computed and saved to pred_path in fields 'tke_pred'")
+
+
+    
 
 
     def compute_TKE_true(self, true_path, batch_size=1000):

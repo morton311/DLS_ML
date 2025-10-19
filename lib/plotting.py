@@ -1,7 +1,7 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
-plt.rcParams['text.usetex'] = True
+
 import pickle
 import os
 import numpy as np
@@ -11,9 +11,11 @@ from scipy.signal import welch, correlate, coherence, correlation_lags, csd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import FuncFormatter
 
+
 paper_width = 470 # pt
 width = paper_width / 72.27 # inches
 height = width / 1.618 # inches
+plt.rcParams['text.usetex'] = True
 # set default font size
 plt.rcParams['font.size'] = 10 # Change default font size to 12
 plt.rcParams['axes.titlesize'] = 12 # Change axes title font size
@@ -719,6 +721,48 @@ def coeff_PDF(runner, data_dict, eval_idx, true_idx):
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison.png'), dpi=600)
     plt.close()
 
+def coeff_PDF_seaborn(runner, data_dict, eval_idx, true_idx):
+    from seaborn import kdeplot
+    time_lag = runner.config['params']['time_lag']
+    size = 0.75
+    fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2))
+    # Coefficients for Point 1
+    coeff_true_p1 = data_dict['truth']['p1'][time_lag:, :]
+    coeff_pred_p1 = data_dict['pred']['p1'][time_lag:, :]
+    kdeplot(coeff_true_p1[:, 0], ax=axs[0, 0], label='True $u_{p1}$', color='k', common_norm=True)
+    kdeplot(coeff_pred_p1[:, 0], ax=axs[0, 0], label='Predicted $u_{p1}$', color='r', linestyle='-.', common_norm=True)
+    axs[0, 0].set_ylabel('PDF($u_{p1}$)')
+    # axs[0, 0].set_title('PDF of Coefficients at Point 1 (u-component)') 
+    kdeplot(coeff_true_p1[:, 1], ax=axs[0, 1], label='True $v_{p1}$', color='k', common_norm=True)
+    kdeplot(coeff_pred_p1[:, 1], ax=axs[0, 1], label='Predicted $v_{p1}$', color='r', linestyle='-.', common_norm=True)
+    axs[0, 1].set_ylabel('PDF($v_{p1}$)')
+    # axs[0, 1].set_title('PDF of Coefficients at Point 1 (v-component)')
+    # Coefficients for Point 2
+    coeff_true_p2 = data_dict['truth']['p2'][time_lag:, :]
+    coeff_pred_p2 = data_dict['pred']['p2'][time_lag:, :]
+    kdeplot(coeff_true_p2[:, 0], ax=axs[1, 0], label='True $u_{p2}$', color='k', common_norm=True)
+    kdeplot(coeff_pred_p2[:, 0], ax=axs[1, 0], label='Predicted $u_{p2}$', color='r', linestyle='-.', common_norm=True)
+    axs[1, 0].set_ylabel('PDF($u_{p2}$)')
+    # axs[1, 0].set_title('PDF of Coefficients at Point 2 (u-component)') 
+    kdeplot(coeff_true_p2[:, 1], ax=axs[1, 1], label='True $v_{p2}$', color='k', common_norm=True)
+    kdeplot(coeff_pred_p2[:, 1], ax=axs[1, 1], label='Predicted $v_{p2}$', color='r', linestyle='-.', common_norm=True)
+    axs[1, 1].set_ylabel('PDF($v_{p2}$)')
+    # axs[1, 1].set_title('PDF of Coefficients at Point 2 (v-component)')
+    for ax in axs.flat:
+        ax.grid(visible=True, linestyle='--', linewidth=0.5)    
+    axs[0,1].legend(
+        ['True', 'Predicted'],
+        loc='lower right',
+        bbox_to_anchor=(1.05, 0.9),  # Adjust position to the right of the plot
+        ncol=2,  # Spread horizontally
+        frameon=False,  # Removes legend border,
+        fontsize=8  # Adjust font size
+    )
+    fig.suptitle('Probability Density Function of Velocity at Points of Interest')
+    fig.tight_layout(rect=[0, 0, 1, 1.1])
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison_seaborn.png'), dpi=600)
+    plt.close()
+    
 
 def animate(runner):
     """

@@ -1,0 +1,52 @@
+{
+    "data_name":        "plate_re40_a0",
+
+    "latent_type":      "bvae",
+
+    "latent_params": {
+        "patch_size":   0,
+        "latent_dim":   2,
+        "beta":         0.05,
+        "filters":      [8, 16, 32, 64, 128, 256],
+        "linear":       [256]
+    },
+
+    "model":            "tr_enc",
+
+    "params": {
+        "time_lag":     64,
+        "d_model":      512,
+        "nhead":        4,
+        "num_layers":   4,
+        "embed":        "lin"
+    },
+
+    "train": {
+        "train_split":  0.7,
+        "test_split":   0.1,
+        "sample_train": 0,
+        "sample_test":  0,
+        "lr":           0.001,
+        "num_epochs":   1000,
+        "patience":     25,
+        "train_ahead":  1,
+        "batch_size":   256
+    },
+
+    "predictions": {
+        "validation": {
+            "init":     "val",
+            "lim":      null
+        },
+        "seen": {
+            "init":     "train",
+            "lim":      null
+        },
+        "long":
+        {
+            "init":     "val",
+            "lim":      15000,
+            "arg":      "extrap"
+        }
+    }
+}
