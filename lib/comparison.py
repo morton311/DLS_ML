@@ -17,6 +17,8 @@ paper_width = 470 # pt
 width = paper_width / 72.27 # inches
 height = width / 1.618 # inches
 plt.rcParams['text.usetex'] = True
+# change font to helvetica
+# plt.rcParams['font.family'] = 'Helvetica'
 # set default font size
 plt.rcParams['font.size'] = 10 # Change default font size to 12
 plt.rcParams['axes.titlesize'] = 12 # Change axes title font size
@@ -48,14 +50,16 @@ def compare_RMS(comp_config):
     X = comparisons[1]['results']['X_grid']
     Y = comparisons[1]['results']['Y_grid']
 
-    fig, axes = plt.subplots(2, 1+n_models, figsize=(width, 0.75*height), dpi=600, sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 1+n_models, figsize=(width, 0.8*height), dpi=600, sharex=True, sharey=True)
 
     im = axes[0, 0].contourf(X, Y, rms_true_plot[0], levels = 200, cmap='RdBu_r', vmin=0, vmax=1)
     axes[1, 0].contourf(X, Y, rms_true_plot[1], levels = 200, cmap='RdBu_r', vmin=0, vmax=1)
     axes[0, 0].set_title('Ground Truth')
+    axes[1, 0].set_xlabel('L2 Error = ')
 
     for i, case in enumerate(comparisons):
         rms_pred_plot = case['results']['rms_pred'] / RMS_max
+        error = l2_err_norm(case['results']['rms_true'], case['results']['rms_pred'])
 
         X = comparisons[i]['results']['X_grid']
         Y = comparisons[i]['results']['Y_grid']
@@ -63,6 +67,7 @@ def compare_RMS(comp_config):
         axes[0, i+1].contourf(X, Y, rms_pred_plot[0], levels = 200, cmap='RdBu_r', vmin=0, vmax=1)
         axes[1, i+1].contourf(X, Y, rms_pred_plot[1], levels = 200, cmap='RdBu_r', vmin=0, vmax=1)
         axes[0, i+1].set_title(case['label'])
+        axes[1, i+1].set_xlabel(f'{100*error:.3f}\%')
 
 
     for ax in axes.flatten():
@@ -81,7 +86,7 @@ def compare_RMS(comp_config):
     ticks = np.linspace(0, 1, 6)
     cbar = fig.colorbar(im, ax=axes, orientation='vertical', fraction=0.02, pad=0.01, cmap='RdBu_r', format='%.2f', ticks=ticks)
     cbar.set_label('Normalized RMS', rotation=270, labelpad=15)
-    plt.savefig(os.path.join(comp_config['save_dir'], 'RMS_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(comp_config['save_dir'], 'RMS_comparison.png'), dpi=600, bbox_inches='tight')
         
 
 def compare_tke(comp_config):
@@ -99,13 +104,13 @@ def compare_tke(comp_config):
 
     size = 0.75
     plt.figure(figsize=(size*width, size*height), dpi=600)
-    plt.plot(np.array(true_idx) / 100, tke_true_plot, 'k-', label='Ground Truth')
+    plt.plot(np.array(true_idx) / 100, tke_true_plot[true_idx], '-', label='Ground Truth', color='gray', linewidth=1.5)
     for i, case in enumerate(comparisons):
         
         tke_pred_plot = case['results']['tke_pred']
         
         pred_idx = case['results'].get('pred_idx', 0)
-        plt.plot(np.array(pred_idx) / 100, tke_pred_plot, linestyle=case['line_style'], label=case['label'], color=case.get('color', None))
+        plt.plot(np.array(pred_idx) / 100, tke_pred_plot, linestyle=case['line_style'], label=case['label'], color=case.get('color', None), linewidth=1)
 
     plt.xlabel('Nondimensional time')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
@@ -128,10 +133,10 @@ def compare_tke(comp_config):
     # frequency spectrum
     plt.figure(figsize=(size*width, size*height), dpi=600)
     f, Pxx_true = welch(comparisons[1]['results']['tke_true'], fs=100, nperseg=256)
-    plt.loglog(f, Pxx_true, 'k-', label='Ground Truth')
+    plt.loglog(f, Pxx_true, '-', label='Ground Truth', color='gray', linewidth=1.5)
     for i, case in enumerate(comparisons):      
         f, Pxx_pred = welch(case['results']['tke_pred'], fs=100, nperseg=256)
-        plt.loglog(f, Pxx_pred, linestyle=case['line_style'], label=case['label'], color=case.get('color', None)) 
+        plt.loglog(f, Pxx_pred, linestyle=case['line_style'], label=case['label'], color=case.get('color', None), linewidth=1) 
     plt.xlabel('Nondimensional Frequency')
     plt.ylabel('PSD($\mathrm{TKE}$)')
     # plt.title('Power Spectral Density of TKE', pad=16)
@@ -144,7 +149,7 @@ def compare_tke(comp_config):
         columnspacing=1.0
     )
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.savefig(os.path.join(comp_config['save_dir'], 'TKE_PSD_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(comp_config['save_dir'], 'TKE_PSD_comparison.png'), dpi=600, bbox_inches='tight')
     plt.close()
 
 
@@ -152,13 +157,20 @@ def compare_tke(comp_config):
     size = 1
     fig, axes = plt.subplots(2, math.ceil((1+n_models)/2), figsize=(size*width, size*height), dpi=600)
     axes = axes.flatten()
+
+    axes[n_models].loglog(f, Pxx_true, '-', label='Ground Truth', color='gray', linewidth=1.5)
+    axes[n_models].set_xlabel('Nondimensional Frequency')
+    axes[n_models].set_ylabel('PSD($\mathrm{TKE}$)')
+    axes[n_models].set_title('Power Spectral Density of TKE')
+
+
     for i, case in enumerate(comparisons):
         tke_true_plot = case['results']['tke_true']
         true_idx = case['results'].get('true_idx', 0)
         tke_pred_plot = case['results']['tke_pred']
         pred_idx = case['results'].get('pred_idx', 0)
-        axes[i].plot(np.array(true_idx) / 100, tke_true_plot, 'k-', label='Ground Truth')
-        axes[i].plot(np.array(pred_idx) / 100, tke_pred_plot, linestyle=case['line_style'], label=case['label'], color=case.get('color', None))
+        axes[i].plot(np.array(true_idx) / 100, tke_true_plot[true_idx], '-', label='Ground Truth',color='gray', linewidth=1.5)
+        axes[i].plot(np.array(pred_idx) / 100, tke_pred_plot, linestyle=case['line_style'], label=case['label'], color=case.get('color', None), linewidth=1)
         axes[i].set_title(case['label'])
         axes[i].set_xlabel('Nondimensional time')
         axes[i].set_ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
@@ -167,13 +179,12 @@ def compare_tke(comp_config):
         axes[i].grid(visible=True, linestyle='--', linewidth=0.5)
         
         f, Pxx_pred = welch(case['results']['tke_pred'], fs=100, nperseg=256)
-        axes[n_models].loglog(f, Pxx_pred, linestyle=case['line_style'], label=case['label'], color=case.get('color', None))
+        axes[n_models].loglog(f, Pxx_pred, linestyle=case['line_style'], label=case['label'], color=case.get('color', None), linewidth=1)
 
-    axes[n_models].loglog(f, Pxx_true, 'k-', label='Ground Truth')
-    axes[n_models].set_xlabel('Nondimensional Frequency')
-    axes[n_models].set_ylabel('PSD($\mathrm{TKE}$)')
-    axes[n_models].set_title('Power Spectral Density of TKE')
+    
+    
 
+    # Collect handles and lables from one of the axes
     handles_labels = [axes[n_models].get_legend_handles_labels()]
     handles, labels = [], []
     for hl in handles_labels:
@@ -195,7 +206,7 @@ def compare_tke(comp_config):
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
-    plt.savefig(os.path.join(comp_config['save_dir'], 'TKE_comparison_subplots.png'), dpi=600)
+    plt.savefig(os.path.join(comp_config['save_dir'], 'TKE_comparison_subplots.png'), dpi=600, bbox_inches='tight')
     plt.close()
 
     
@@ -218,19 +229,19 @@ def compare_pdf(comp_config):
     fig, axs = plt.subplots(2, 2, figsize=(size*width, size*height))
     # Coefficients for Point 1
     coeff_true_p1 = truth['p1'][time_lag:, :]
-    kdeplot(coeff_true_p1[:, 0], ax=axs[0, 0], label='Ground Truth', color='k', common_norm=True)
+    kdeplot(coeff_true_p1[:, 0], ax=axs[0, 0], label='Ground Truth', color='gray', common_norm=True, linewidth=1.5)
     axs[0, 0].set_title('PDF($u_{p1}$)')
 
-    kdeplot(coeff_true_p1[:, 1], ax=axs[0, 1], label='True $v_{p1}$', color='k', common_norm=True)
+    kdeplot(coeff_true_p1[:, 1], ax=axs[0, 1], label='True $v_{p1}$', color='gray', common_norm=True, linewidth=1.5)
     axs[0, 1].set_title('PDF($v_{p1}$)')
 
 
     # Coefficients for Point 2
     coeff_true_p2 = truth['p2'][time_lag:, :]
-    kdeplot(coeff_true_p2[:, 0], ax=axs[1, 0], label='True $u_{p2}$', color='k', common_norm=True)
+    kdeplot(coeff_true_p2[:, 0], ax=axs[1, 0], label='True $u_{p2}$', color='gray', common_norm=True, linewidth=1.5)
     axs[1, 0].set_title('PDF($u_{p2}$)')
 
-    kdeplot(coeff_true_p2[:, 1], ax=axs[1, 1], label='True $v_{p2}$', color='k', common_norm=True)
+    kdeplot(coeff_true_p2[:, 1], ax=axs[1, 1], label='True $v_{p2}$', color='gray', common_norm=True, linewidth=1.5)
     axs[1, 1].set_title('PDF($v_{p2}$)')
 
     # Now plot predictions from each model
@@ -239,19 +250,19 @@ def compare_pdf(comp_config):
         time_lag = case['results'].get('time_lag', 0)
 
         coeff_pred_p1 = pred['p1'][time_lag:, :]
-        kdeplot(coeff_pred_p1[:, 0], ax=axs[0, 0], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True)
-        kdeplot(coeff_pred_p1[:, 1], ax=axs[0, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True)
+        kdeplot(coeff_pred_p1[:, 0], ax=axs[0, 0], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True, linewidth=1)
+        kdeplot(coeff_pred_p1[:, 1], ax=axs[0, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True, linewidth=1)
 
         coeff_pred_p2 = pred['p2'][time_lag:, :]
-        kdeplot(coeff_pred_p2[:, 0], ax=axs[1, 0], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True)
-        kdeplot(coeff_pred_p2[:, 1], ax=axs[1, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True)
+        kdeplot(coeff_pred_p2[:, 0], ax=axs[1, 0], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True, linewidth=1)
+        kdeplot(coeff_pred_p2[:, 1], ax=axs[1, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), common_norm=True, linewidth=1)
 
 
     for ax in axs.flat:
         # ax.grid(visible=True, linestyle='--', linewidth=0.5)  
         ax.set_ylabel('')  
         ax.set_yticks([])
-    # Collect all handles and labels from all axes
+    # Collect handles and lables from one of the axes
     handles_labels = [axs[0,0].get_legend_handles_labels()]
     handles, labels = [], []
     for hl in handles_labels:
@@ -272,5 +283,135 @@ def compare_pdf(comp_config):
     )
     fig.tight_layout(rect=[0, 0.05, 1, 1])
     # fig.suptitle('Probability Density Function of Velocity at Points of Interest')
-    plt.savefig(os.path.join(comp_config['save_dir'], 'PDF_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(comp_config['save_dir'], 'PDF_comparison.png'), dpi=600, bbox_inches='tight')
+    plt.close()
+
+
+def compare_phase_portrait(comp_config):
+    """
+    Compare the phase portrait of multiple models against the true data in a subplot for each model for publication. 
+    """
+    comparisons = comp_config['comparisons']
+    n_models = len(comparisons)
+    time_lag = comparisons[1]['results'].get('time_lag', 0)
+    truth = comparisons[1]['results']['point_dict']['truth']
+    size = 1
+    fig, axs = plt.subplots(2, n_models, figsize=(size*width, 1.2*size*height), sharex=False, sharey=True)
+
+    coeff_true_p1 = truth['p1'][time_lag:, :]
+    coeff_true_p2 = truth['p2'][time_lag:, :]
+
+
+    # Now plot predictions from each model
+    for i, case in enumerate(comparisons):  
+        pred = case['results']['point_dict']['pred']
+        time_lag = case['results'].get('time_lag', 0)
+
+        coeff_pred_p1 = pred['p1'][time_lag:, :]
+        axs[0, i].plot(coeff_true_p1[:, 0], coeff_true_p1[:, 1], label='Ground Truth', color='gray', linestyle='--', linewidth=1.5)
+        axs[0, i].plot(coeff_pred_p1[:, 0], coeff_pred_p1[:, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), linewidth=1.5)
+        # axs[0, i+1].set_title(f"Phase Portrait: {case['label']}")
+        axs[0, i].set_xlabel('$u_{p1}$')
+        axs[0, i].set_ylabel('$v_{p1}$')
+
+        coeff_pred_p2 = pred['p2'][time_lag:, :]
+        axs[1, i].plot(coeff_true_p2[:, 0], coeff_true_p2[:, 1], label='Ground Truth', color='gray', linestyle='--', linewidth=1.5)
+        axs[1, i].plot(coeff_pred_p2[:, 0], coeff_pred_p2[:, 1], label=f"{case['label']}", linestyle=case['line_style'], color=case.get('color', None), linewidth=1.5)
+        # axs[1, i+1].set_title(f"Phase Portrait: {case['label']}")
+        axs[1, i].set_xlabel('$u_{p2}$')
+        axs[1, i].set_ylabel('$v_{p2}$')
+
+        axs[0, i].set_title(f"{case['label']}")
+
+
+    # Collect all handles and labels from all axes
+    handles_labels = []
+    for ax in axs.flatten():
+        handles_labels.append(ax.get_legend_handles_labels())
+    handles, labels = [], []
+    for hl in handles_labels:
+        for handle, label in zip(*hl):
+            if label not in labels:  # Avoid duplicate labels
+                labels.append(label)
+                handles.append(handle)
+    # Create a figure-level legend
+    fig.legend(
+        handles, labels,
+        loc='lower right',
+        bbox_to_anchor=(1, 0),
+        ncol=n_models+1,
+        frameon=False,
+        fontsize=8,
+        columnspacing=1.0
+    )
+
+    for ax in axs.flatten():
+        ax.grid(visible=True, linestyle='--', linewidth=0.5)
+
+    # xticks_p1 = np.round(np.linspace(np.min(coeff_true_p1[:,0]), np.max(coeff_true_p1[:,0]), 5), 2)
+    # xticks_p2 = np.round(np.linspace(np.min(coeff_true_p2[:,0]), np.max(coeff_true_p2[:,0]), 5), 2)
+    # yticks = np.round(np.linspace(np.min(np.concatenate([coeff_true_p1[:,1],coeff_true_p2[:,1]],axis=0)), np.max(np.concatenate([coeff_true_p1[:,1],coeff_true_p1[:,1]],axis=0)), 5), 2)
+
+    # for ax in axs[0, :]:
+    #     ax.set_xticks(xticks_p1[1:-1])
+    #     ax.set_yticks(yticks[1:-1])
+    # for ax in axs[1, :]:
+    #     ax.set_xticks(xticks_p2[1:-1])
+    #     ax.set_yticks(yticks[1:-1])
+
+    if comp_config.get("save_dir").contains("30k"):
+        xticks_p1 = 3*np.array([-0.02, 0, 0.02, 0.04])
+        xticks_p2 = 5*np.array([-0.02, -0.01, 0, 0.01])
+        yticks_p1 = 3*np.array([-0.04, -0.03, -0.02, -0.01, 0, 0.01])
+        yticks_p2 = 3*np.array([-0.04, -0.03, -0.02, -0.01, 0, 0.01])
+
+        for ax in axs[0, :]:
+            ax.set_xticks(xticks_p1)
+            ax.set_yticks(yticks_p1)
+        for ax in axs[1, :]:
+            ax.set_xticks(xticks_p2)
+            ax.set_yticks(yticks_p2)
+
+    # xticks_p2 = np.round(np.linspace(np.min(coeff_true_p2[:,0]), np.max(coeff_true_p2[:,0]), 5), 2)
+    # yticks = np.round(np.linspace(np.min(np.concatenate([coeff_true_p1[:,1],coeff_true_p2[:,1]],axis=0)), np.max(np.concatenate([coeff_true_p1[:,1],coeff_true_p1[:,1]],axis=0)), 5), 2)
+
+    # for ax in axs[0, :]:
+    #     ax.set_xticks(xticks_p1[1:-1])
+    #     ax.set_yticks(yticks[1:-1])
+    # for ax in axs[1, :]:
+    #     ax.set_xticks(xticks_p2[1:-1])
+    #     ax.set_yticks(yticks[1:-1])
+
+    # # make axlim = 1.2 * max abs data value for each subplot
+    # for i in range(axs.shape[0]):
+    #     for j in range(axs.shape[1]):
+    #         ax = axs[i, j]
+    #         all_x_data = []
+    #         all_y_data = []
+    #         for line in ax.get_lines():
+    #             all_x_data.extend(line.get_xdata())
+    #             all_y_data.extend(line.get_ydata())
+    #         max_val_x = np.max(np.abs(all_x_data))
+    #         max_val_y = np.max(np.abs(all_y_data))
+    #         xlim = 1.2 * max_val_x
+    #         ylim = 1.2 * max_val_y
+    #         ax.set_xlim(-xlim, xlim)
+    #         ax.set_ylim(-ylim, ylim)
+
+    # double font size for all figure text elements and legend
+    # for ax in axs.flatten():
+    #     for item in ([ax.xaxis.label, ax.yaxis.label] +
+    #                  ax.get_xticklabels() + ax.get_yticklabels()):
+    #         item.set_fontsize(16)
+
+    #     ax.title.set_fontsize(24)
+
+
+    
+
+    
+
+    fig.tight_layout(rect=[0, 0.03, 1, 1])
+    # fig.suptitle('Phase Portraits of Velocity at Points of Interest')
+    plt.savefig(os.path.join(comp_config['save_dir'], 'Phase_Portrait_comparison.png'), dpi=600, bbox_inches='tight')
     plt.close()

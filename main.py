@@ -83,6 +83,7 @@ if __name__ == "__main__":
         comparison.compare_RMS(config)
         comparison.compare_tke(config)
         comparison.compare_pdf(config)
+        comparison.compare_phase_portrait(config)
 
 
 

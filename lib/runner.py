@@ -63,8 +63,8 @@ class runner(nn.Module):
         
 
         print(f'Using device: {self.device}')
-        if is_init_path and config['mode'] != 'compare':
-            DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=4)
+        # if is_init_path and config['mode'] != 'compare':
+        #     DisplayTree(header=True, ignoreList=['*.pyc', '*.png'], maxDepth=4)
         return paths
 
 
@@ -116,7 +116,7 @@ class runner(nn.Module):
         elif self.config['latent_type'] == 'pod':
             with h5py.File(self.paths_bib.data_path, 'r') as f:
                 mean = f['mean'][:]
-                data = f['UV'][:] - mean[np.newaxis, ...]
+                data = f['UV'][:2501] - mean[np.newaxis, ...]
             modes, eigVal, latent_config = pod.pod_mode_find(data, self.config)
 
             with h5py.File(self.paths_bib.latent_path, 'w') as f:

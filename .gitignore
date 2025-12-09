@@ -1,6 +1,7 @@
 # Exclude data, latent, figs, anim, and models directories
 data/
 results/
+*results*/
 
 # Exclude Python cache files
 __pycache__/

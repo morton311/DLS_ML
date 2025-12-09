@@ -20,7 +20,10 @@ def pod_mode_find(data, config):
     # if flag == 'large':
     # Low rank svd
     print('Calculating POD modes using low-rank SVD...')
+    time_start = time.time()
     modes, eigVal, _ = np.linalg.svd(data.T, full_matrices=False)
+    time_end = time.time()
+    print(f'POD modes calculated in {time_end - time_start:.2f} seconds.')
 
     # else:
     #     print('Calculating POD modes using randomized SVD...')
@@ -57,6 +60,9 @@ def pod_decomp(data_path, latent_path, batch_size=1000):
         latent_path (str): Path to save the latent dofs.
     """
     import h5py
+    import time
+
+    total_time = 0.0
 
     with h5py.File(latent_path, 'r+') as g:
         modes = g['modes'][:]
@@ -69,8 +75,9 @@ def pod_decomp(data_path, latent_path, batch_size=1000):
                 num_batches += 1
                 
             g.create_dataset('dofs', (num_snaps, modes.shape[1]), dtype='float32')
-
+            
             for i in range(num_batches):
+                start_time = time.time()
                 start = i * batch_size
                 end = min((i + 1) * batch_size, num_snaps)
                 print(f"Processing batch {i + 1}/{num_batches} ({start}:{end})")
@@ -78,8 +85,13 @@ def pod_decomp(data_path, latent_path, batch_size=1000):
                 data = f['UV'][start:end, ...] - mean[np.newaxis, ...]
                 data = data.reshape(data.shape[0], -1)
                 temporal_coeff = np.dot(data, modes)
+                end_time = time.time()
                 g['dofs'][start:end, :] = temporal_coeff
-        
+                
+                total_time += end_time - start_time 
+            
+            print(f"POD decomposition completed in {total_time:.2f} seconds.")
+            print(f"Time per snapshot: {total_time / num_snaps:.4f} seconds.")
         
         print(f"POD decomposition completed and saved to {latent_path}")
 
@@ -97,6 +109,9 @@ def pod_recon_long(config, dofs, rec_path, latent_path, batch_size=1000):
 
     num_snaps = dofs.shape[0]
     num_batches = num_snaps // batch_size
+
+    total_time = 0.0
+
     if num_snaps % batch_size != 0:
         num_batches += 1
     with h5py.File(rec_path, 'w') as rec_file:
@@ -105,6 +120,7 @@ def pod_recon_long(config, dofs, rec_path, latent_path, batch_size=1000):
         rec_file.create_dataset('Q_rec', (dofs.shape[0], config.nx_t, config.ny_t, 2), dtype='float32')
 
         for i in range(num_batches):
+            start_time = time.time()
             start = i * batch_size
             end = min((i + 1) * batch_size, num_snaps)
             sys.stdout.write(f"Reconstructing batch {i + 1}/{num_batches} ({start}:{end})")
@@ -113,6 +129,8 @@ def pod_recon_long(config, dofs, rec_path, latent_path, batch_size=1000):
             time_start = time.time()
             rec_data = np.dot(dofs[start:end, :], modes.T)
             rec_data = rec_data.reshape(rec_data.shape[0], config.nx_t, config.ny_t, 2)
+            end_time = time.time()
+            total_time += end_time - time_start
             rec_file['Q_rec'][start:end, ...] = rec_data
             time_end = time.time()
             batch_time = time_end - time_start
@@ -124,13 +142,19 @@ def pod_recon_long(config, dofs, rec_path, latent_path, batch_size=1000):
                 sys.stdout.write(f' -> Proj. time: {proj_time_str}')
             sys.stdout.write('\n')
             sys.stdout.flush()
+
+        print(f'Total reconstruction time (excluding disk I/O): {total_time:.2f}s')
         sys.stdout.write('\n')
 
 
 
 def freq_extrapolation(latent_data, dt, new_length):
+    import time
     # perform FFT of data along axis 0 to obtain magnitude and phase
+    start_time = time.time()
     data_fft = np.fft.fft(latent_data, axis=0)
+    end_time = time.time()
+    print(f"FFT computed in {end_time - start_time:.2f} seconds.")
     data_fft = data_fft[:latent_data.shape[0]//2 + 1, :]  # keep only positive frequencies
 
     freq = np.fft.fftfreq(latent_data.shape[0], dt)
@@ -139,9 +163,11 @@ def freq_extrapolation(latent_data, dt, new_length):
     num_modes = latent_data.shape[1]
     num_snaps = latent_data.shape[0]
 
+    start_time = time.time()
     # data_extrap_i = \sum_j (mag_i(f_j) * cos(2*pi*f_j*t + phase_i(f_j)) for each i
     data_extrap = np.zeros((new_length, num_modes), dtype=np.complex_)
     t = np.arange(new_length) * dt
+    
     for i in range(num_modes):
         mag = np.abs(data_fft[:, i])
         phase = np.unwrap(np.angle(data_fft[:, i]), axis=0)
@@ -149,5 +175,7 @@ def freq_extrapolation(latent_data, dt, new_length):
         for j in range(len(freq)):
             data_extrap[:, i] += 2/(num_snaps) * mag[j] * np.cos(2 * np.pi * freq[j] * t + phase[j])
     
+    end_time = time.time()
+    print(f"Frequency extrapolation computed in {end_time - start_time:.2f} seconds.")
 
     return data_extrap.real

@@ -142,6 +142,7 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
         print('num_vars: ', num_vars)
 
 
+    start_time = time.time()
     grid_x = np.linspace(1, nx, nx)
     grid_y = np.linspace(1, ny, ny)
     [grid_x, grid_y] = np.meshgrid(grid_x, grid_y)
@@ -311,6 +312,10 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
     M_local_u = modemat_local_u_wt.T @ modemat_local_u
     M_local_v = modemat_local_v_wt.T @ modemat_local_v
 
+    
+
+    
+
     M_u = lil_matrix((num_gfem_nodes * dof_node, num_gfem_nodes * dof_node))
     M_v = lil_matrix((num_gfem_nodes * dof_node, num_gfem_nodes * dof_node))
 
@@ -331,13 +336,18 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
             M_v[np.ix_(lltogl, lltogl)] = M_v[np.ix_(lltogl, lltogl)] + M_local_v
 
 
-
+    
+    end_time = time.time()
+    print(f'Computed DLS latent space in {end_time - start_time:.2f} seconds')
     print('M constructed')
 
     print('Prefactorizing M')
     # Convert lilmatrix to csr matrix
     M_u = M_u.tocsc()
     M_v = M_v.tocsc()
+
+    start_time = time.time()
+
     # Pre-factorize the matrices for efficiency
     solve_M_u = factorized(M_u)
     solve_M_v = factorized(M_v)
@@ -351,6 +361,11 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
     dof_u = np.zeros((num_gfem_nodes * dof_node, batch_size))
     dof_v = np.zeros((num_gfem_nodes * dof_node, batch_size))
 
+    end_time = time.time()
+
+
+    t_time = end_time - start_time
+    
 
     print('Looping through snapshots, solving for dofs')
     with h5py.File(data_path, 'r') as f:
@@ -358,6 +373,7 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
         if num_snaps % batch_size != 0:
             loops += 1
         for i in tqdm(range(loops)):
+            start_time = time.time()
             snap_start = i * batch_size
             snap_end = (i + 1) * batch_size
             if snap_end > num_snaps:
@@ -410,11 +426,18 @@ def gfem_2d_long(data_path: str, field_name: str, latent_file: str, patch_size: 
             dof_u = solve_M_u(L_u)
             dof_v = solve_M_v(L_v)
 
+            end_time = time.time()
+
+            t_time += end_time - start_time
+
             dof_file['dof_u'][snap_start:snap_end] = dof_u.T
             dof_file['dof_v'][snap_start:snap_end] = dof_v.T
             
 
     print('Done solving for dof')
+
+    
+    print(f'Solved for DOFs in {t_time:.2f} seconds')
 
 
     config = dls_long_Config(data_path, field_name, patch_size, num_modes, modemat_local_u, modemat_local_v)
@@ -473,6 +496,8 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
             del rec_file['Q_rec']
         rec_file.create_dataset('Q_rec', (dof_u.shape[-1], config.nx_t, config.ny_t, 2), dtype='float32')
 
+        t_time = 0.0
+
         for id in range(num_batches):
             
 
@@ -490,6 +515,7 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
 
             for i in range(config.nx_g - 1):
                 for j in range(config.ny_g - 1):
+                    start_time_elem = time.time() 
                     lltogl = np.zeros(dof_elem, dtype=int)
                     for lindx in range(4):
                         indx_dof_start = ((i + IJK[lindx, 0]) * config.ny_g + (j + IJK[lindx, 1])) * dof_node
@@ -506,12 +532,17 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
                     Q_rec_u[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_u
                     Q_rec_v[config.sample_x[i]:config.sample_x[i + 1] + 1, config.sample_y[j]:config.sample_y[j + 1] + 1] = Q_rec_local_v
 
+                    end_time_elem = time.time()
+
+                    t_time += end_time_elem - start_time_elem
+
             rec_file['Q_rec'][snap_start:snap_end, :, :, 0] = Q_rec_u.transpose(2,0,1)
             rec_file['Q_rec'][snap_start:snap_end, :, :, 1] = Q_rec_v.transpose(2,0,1)
 
             time_end = time.time()
             batch_time = time_end - time_start
             sys.stdout.write(f', processed in {batch_time:.2f}s')
+            
             if id+1 != num_batches:
                 proj_time = (num_batches - (id + 1)) * batch_time / 60 # in minutes
                 # convert to min:sec format
@@ -519,6 +550,8 @@ def gfem_recon_long(rec_path, config, dof_u=None, dof_v=None, batch_size=100):
                 sys.stdout.write(f' -> Proj. time: {proj_time_str}')
             sys.stdout.write('\n')
             sys.stdout.flush()
+
+        sys.stdout.write(f'Total reconstruction time not with saving to disk: {t_time:.2f}s\n')
         sys.stdout.write('\n')
 
 def latent_eval(runner):
@@ -545,6 +578,11 @@ def latent_eval(runner):
             Q_rec = gfem_recon(dof_u=dof_u.T, dof_v=dof_v.T, config=runner.l_config)
             print('Data shape:', Q_rec.shape)
             print('Data reconstructed.')
+
+            vis_modes(runner, runner.l_config)
+
+
+
         elif runner.config['latent_type'] == 'pod':
             latent_length = f['dofs'].shape[0]
             if latent_length > eval_length_max:
@@ -563,18 +601,37 @@ def latent_eval(runner):
             import os
             os.makedirs(runner.paths_bib.fig_dir + 'latent_modes/', exist_ok=True)
             print('Saving POD modes...')
-            for i in range(0, runner.config['latent_params']['num_modes']):
+            save_modes = [0, 1, 2, 3, 4, 9, 19, 29, 39, 49, 99, 199]
+            for i in save_modes:
                 
                 pod_mode = modes[:, i].reshape((runner.l_config.nx_t, runner.l_config.ny_t, 2))
                 umax = np.max(np.abs(pod_mode[:,:,0]))
                 vmax = np.max(np.abs(pod_mode[:,:,1]))
                 fig, ax = plt.subplots(1,2, figsize=(8,4))
                 im0 = ax[0].imshow(pod_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
-                ax[0].set_title(f'POD Mode {i+1} - u')
+                # ax[0].set_title(f'POD Mode {i+1} - u')
                 im1 = ax[1].imshow(pod_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
-                ax[1].set_title(f'POD Mode {i+1} - v')
+                # ax[1].set_title(f'POD Mode {i+1} - v')
                 
                 plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/pod_mode_{i+1}.png', dpi=600)
+                plt.close()
+
+                # save u and v modes separately with thickened axes and no ticks
+                fig, ax = plt.subplots(figsize=(4,4))
+                im0 = ax.imshow(pod_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
+                for spine in ax.spines.values():
+                    spine.set_linewidth(1.5)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/pod_mode_{i+1}_u.png', dpi=600)
+                plt.close()
+                fig, ax = plt.subplots(figsize=(4,4))
+                im1 = ax.imshow(pod_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
+                for spine in ax.spines.values():
+                    spine.set_linewidth(1.5)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/pod_mode_{i+1}_v.png', dpi=600)
                 plt.close()
 
         elif runner.config['latent_type'] == 'bvae':
@@ -640,9 +697,16 @@ def latent_eval(runner):
                 vmax = np.max(np.abs(bvae_mode[:,:,1]))
                 fig, ax = plt.subplots(1,2, figsize=(8,4))
                 im0 = ax[0].imshow(bvae_mode[:,:,0], cmap='seismic', vmin=-umax, vmax=umax, origin='lower', interpolation='bessel')
-                ax[0].set_title(f'BVAE Mode {i+1} - u')
+                # ax[0].set_title(f'BVAE Mode {i+1} - u')
                 im1 = ax[1].imshow(bvae_mode[:,:,1], cmap='seismic', vmin=-vmax, vmax=vmax, origin='lower', interpolation='bessel')
-                ax[1].set_title(f'BVAE Mode {i+1} - v')
+                # ax[1].set_title(f'BVAE Mode {i+1} - v')
+
+                # thicken axes and remove ticks
+                for a in ax:
+                    a.set_xticks([])
+                    a.set_yticks([])
+                    for spine in a.spines.values():
+                        spine.set_linewidth(1.5)
                 
                 plt.savefig(runner.paths_bib.fig_dir + f'latent_modes/bvae_mode_{i+1}.png', dpi=600)
                 plt.close()
@@ -797,4 +861,96 @@ def latent_eval(runner):
     
     
 
+def vis_modes(runner, config):
+    from matplotlib import pyplot as plt
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.mplot3d import Axes3D
+
+    paper_width = 470 # pt
+    width = paper_width / 72.27 # inches
+    height = width / 1.618 # inches
+    plt.rcParams['text.usetex'] = True
+    # set default font size
+    plt.rcParams['font.size'] = 8 # Change default font size to 12
+    plt.rcParams['axes.titlesize'] = 10 # Change axes title font size
+    plt.rcParams['axes.labelsize'] = 8 # Change axes labels font size
+    plt.rcParams['xtick.labelsize'] = 8 # Change x-axis tick labels font size
+    plt.rcParams['ytick.labelsize'] = 8 # Change y-axis tick labels font size
+    plt.rcParams['legend.fontsize'] = 8 # Change legend font size
+    plt.rcParams['figure.constrained_layout.use'] = True
+
+    shape_funcs = config.modemat_local_u
+    dims = shape_funcs.shape
+    nskip = ((config.patch_size-1) // 2)
+    patch_size = config.patch_size
+    num_modes = config.num_modes
+    shape_funcs = shape_funcs.reshape(int(np.sqrt(dims[0])), int(np.sqrt(dims[0])), -1)
+
+    shape_func_reshaped = np.zeros((patch_size, patch_size, num_modes+1), dtype=shape_funcs.dtype)
+
+    for i in range(num_modes+1):
+        shape_func_reshaped[:nskip+1, nskip:, i] = shape_funcs[..., i]
+        shape_func_reshaped[:nskip+1, :nskip+1, i] = shape_funcs[..., i+num_modes+1]
+        shape_func_reshaped[ nskip:, :nskip+1, i] = shape_funcs[..., i+2*num_modes+2]
+        shape_func_reshaped[ nskip:, nskip:, i] = shape_funcs[..., i+3*num_modes+3]
+
+    N, M = 2, 8
+    size = 0.8
+    fig, axes = plt.subplots(N, M, sharey=True, sharex=True, figsize=(size*width, 2/7*size*width), gridspec_kw={'hspace': 0.05, 'wspace': 0.05}) #
+
+    ax = axes.flatten()
+    for i in range(num_modes):
+        j = i
+        if i > 4:
+            j += 3
+        vmax = np.max(np.abs(shape_func_reshaped[...,i+1]))
+        ax[3+j].pcolormesh(shape_func_reshaped[...,i+1], cmap='seismic', shading='Gouraud', vmin=-vmax, vmax=vmax)
+        ax[3+j].set_xticks([])
+        ax[3+j].set_yticks([])
+        ax[3+j].set_aspect('equal')
+
+    for row in range(2):
+        for col in range(3):
+            fig.delaxes(axes[row, col])
+
+    big_ax = fig.add_axes([0.05, -0.05,
+                           0.25, 0.95])
+    vmax = np.max(np.abs(shape_func_reshaped[...,0]))
+    im0 = big_ax.pcolormesh(shape_func_reshaped[...,0], cmap='seismic', shading='Gouraud', vmin=-vmax, vmax=vmax)
+    big_ax.set_aspect('equal')
+    big_ax.set_xticks([])
+    big_ax.set_yticks([])
+    big_ax.set_title('2D Linear FEM Shape Function')
+
+    # for row in range(2):
+    #     for col in range(2, M):
+    #         pos = axes[row, col].get_position()
+    #         axes[row, col].set_position([
+    #             pos.x0 + 0.001,
+    #             pos.y0,
+    #             pos.width,
+    #             pos.height
+    #         ])
+
+    ax[5].set_title('Linear FEM enriched with local POD modes')
+    plt.savefig(runner.paths_bib.fig_dir + 'gfem_shape_functions.png', dpi=600, bbox_inches='tight')
+    plt.close()
+
+    fig = plt.figure(figsize=(width, height))
+    num_to_plot = num_modes+1
+    for i in range(num_to_plot):
+        j = i
+        if i > 5:
+            j +=1
+        ax3d = fig.add_subplot(2, 6, j+1, projection='3d')
+        X, Y = np.meshgrid(np.arange(patch_size), np.arange(patch_size))
+        Z = shape_func_reshaped[..., i]
+        vmax = np.max(np.abs(Z))
+        surf = ax3d.plot_surface(X, Y, Z, cmap='seismic', alpha=0.95, vmin=-vmax, vmax=vmax)
+        ax3d.set_xticklabels([])
+        ax3d.set_yticklabels([])
+        ax3d.set_zticklabels([])
+        ax3d.set_title(f'Shape Function {i}')
     
+    plt.savefig(runner.paths_bib.fig_dir + 'gfem_shape_functions_3d.png', dpi=600)
+    plt.close()
