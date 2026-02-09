@@ -11,6 +11,7 @@ from scipy.signal import welch, correlate, coherence, correlation_lags, csd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import FuncFormatter
 import math
+from lib.plotting import curl
 
 
 paper_width = 470 # pt
@@ -225,7 +226,7 @@ def compare_pdf(comp_config):
     truth = comparisons[1]['results']['point_dict']['truth']
 
 
-    size = 0.75
+    size = 0.8
     fig, axs = plt.subplots(2, 2, figsize=(size*width, size*height))
     # Coefficients for Point 1
     coeff_true_p1 = truth['p1'][time_lag:, :]
@@ -359,7 +360,7 @@ def compare_phase_portrait(comp_config):
     #     ax.set_xticks(xticks_p2[1:-1])
     #     ax.set_yticks(yticks[1:-1])
 
-    if comp_config.get("save_dir").contains("30k"):
+    if "30k" in comp_config.get("save_dir"):
         xticks_p1 = 3*np.array([-0.02, 0, 0.02, 0.04])
         xticks_p2 = 5*np.array([-0.02, -0.01, 0, 0.01])
         yticks_p1 = 3*np.array([-0.04, -0.03, -0.02, -0.01, 0, 0.01])
@@ -415,3 +416,134 @@ def compare_phase_portrait(comp_config):
     # fig.suptitle('Phase Portraits of Velocity at Points of Interest')
     plt.savefig(os.path.join(comp_config['save_dir'], 'Phase_Portrait_comparison.png'), dpi=600, bbox_inches='tight')
     plt.close()
+
+
+def compare_anim(comp_config):
+    """
+    Create an animation comparing the vorticity fields of model predictions against the true data.
+    Display the turbulent kinetic energy (TKE) below the vorticity contours, with all models and ground truth shown together for each time step.
+    """
+
+    import imageio
+    
+    comparisons = comp_config['comparisons']
+    n_models = len(comparisons)
+    run_lim = 30
+    frame_rate = 30
+    
+    grid_x_true = comparisons[1]['results']['X_grid']
+    grid_y_true = comparisons[1]['results']['Y_grid']
+
+    truth_path = comparisons[1]['results']['true_path']
+    
+    # Pre-load all data before animation loop
+    with h5py.File(truth_path, 'r') as f:
+        vort_true_full = f[comparisons[1]['results']['paths_bib'].latent_id + '_vort_true'][:]
+    
+    tke_true = comparisons[1]['results']['tke_true']
+    true_idx = comparisons[1]['results'].get('true_idx', np.arange(len(tke_true)))
+    num_time_steps = comparisons[1]['results']['pred_idx'].shape[0]
+    snap_lim = 2500
+    num_time_steps = min(num_time_steps, snap_lim)
+    total_snaps = len(tke_true)
+    time_lag = comparisons[1]['results'].get('time_lag', 0)
+    frame_skip = int(max(1, np.ceil(num_time_steps / (run_lim * frame_rate))))
+    
+    print(f"Number of snapshots: {num_time_steps}, Frame skip: {frame_skip}")
+    print(f"Vid_length: {(num_time_steps // frame_skip) / frame_rate} seconds")
+    
+    plot_idx = comparisons[1]['results']['pred_idx'][time_lag:num_time_steps:frame_skip]
+    vort_true = vort_true_full[plot_idx] if plot_idx[-1] < total_snaps else vort_true_full[:total_snaps:frame_skip]
+    vmax = np.max(np.abs(vort_true))
+
+    # Pre-load all prediction data
+    vort_pred = []
+    pred_data = []
+    for i, case in enumerate(comparisons):
+        pred_path = case['results']['pred_path']
+        with h5py.File(pred_path, 'r') as f_pred:
+            pred_idx = case['results']['pred_idx'][case['results'].get('time_lag', 0):snap_lim-1:frame_skip]
+            vort_pred.append(f_pred['vort_pred'][pred_idx][:])
+            
+        pred_data.append({
+            'grid_x': case['results']['X_grid'],
+            'grid_y': case['results']['Y_grid'],
+            'tke_pred': case['results']['tke_pred'],
+            'pred_idx': case['results']['pred_idx'],
+            'time_lag': case['results'].get('time_lag', 0),
+            'line_style': case['line_style'],
+            'label': case['label'],
+            'color': case.get('color', None)
+        })
+
+    # Pre-create figure once
+    size = 1
+    fig, axs = plt.subplots(1, n_models+1, figsize=(size*width, 0.5*size*height))
+
+    # fig, axs = plt.subplots(2, n_models+1, figsize=(size*width, size*height), dpi=100)
+    # ax_tke = plt.subplot2grid((2, n_models+1), (1, 0), colspan=4, fig=fig)
+    # plt.subplots_adjust(bottom=0.15, right=0.95)
+    
+    
+    frames = []
+    for t, id in enumerate(plot_idx):
+        # Clear only data, not redraw the entire figure
+        for ax in axs[:]:
+            ax.clear()
+        
+        # Plot ground truth
+        axs[0].contourf(grid_x_true, grid_y_true, vort_true[t], levels=100, cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+        axs[0].set_title('Ground Truth')
+        axs[0].set_aspect('equal', 'box')
+
+        # Plot each model
+        for i in range(n_models):
+            axs[i+1].contourf(pred_data[i]['grid_x'], pred_data[i]['grid_y'], vort_pred[i][t], 
+                                 levels=100, cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+            axs[i+1].set_title(pred_data[i]['label'])
+            axs[i+1].set_aspect('equal', 'box')
+        
+        for ax in axs[:]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        # # Plot TKE signal
+        # m = np.where(true_idx <= id)[0]
+        # if len(m) > 0:
+        #     ax_tke.plot(np.array(true_idx[m[0]:m[-1]]) / 100, tke_true[m[0]:m[-1]], 
+        #                '-', label='Ground Truth', color='gray', linewidth=1.5)
+        
+        # for i, case in enumerate(pred_data):
+        #     m = np.where(case['pred_idx'] <= id)[0]
+        #     if len(m) > 0:
+        #         ax_tke.plot(np.array(case['pred_idx'][m[0]:m[-1]]) / 100, case['tke_pred'][m[0]:m[-1]], 
+        #                    linestyle=case['line_style'], label=case['label'], color=case['color'], linewidth=1)
+        
+        # ax_tke.set_xlabel('Nondimensional time')
+        # ax_tke.set_ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
+        # ax_tke.grid(visible=True, linestyle='--', linewidth=0.5)
+        # if t == 0:
+        #     print("Adding legend to TKE plot")
+        #     fig.legend(loc='lower right', bbox_to_anchor=(0.98, 0), ncol=n_models+1, 
+        #        frameon=False, fontsize=8, columnspacing=1.0)
+
+        # Capture frame
+        fig.canvas.draw()
+        frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+        frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        frames.append(frame)
+
+        if (t+1) % frame_rate == 0:
+            print(f"Processed frame {t+1} / {len(plot_idx)}")
+    
+    plt.close(fig)
+    
+    # Save as mp4
+    writer = imageio.get_writer(os.path.join(comp_config['save_dir'], 'vort_comparison.mp4'),
+                               fps=frame_rate, codec='libx264', quality=10, ffmpeg_params=['-crf', '15'])
+    for frame in frames:
+        writer.append_data(frame)
+    writer.close()
+
+
+    

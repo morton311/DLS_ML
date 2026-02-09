@@ -80,10 +80,11 @@ if __name__ == "__main__":
             run.eval()
             config['comparisons'][i]['results'] = run.results
 
-        comparison.compare_RMS(config)
-        comparison.compare_tke(config)
-        comparison.compare_pdf(config)
-        comparison.compare_phase_portrait(config)
+        # comparison.compare_RMS(config)
+        # comparison.compare_tke(config)
+        # comparison.compare_pdf(config)
+        # comparison.compare_phase_portrait(config)
+        comparison.compare_anim(config)
 
 
 

@@ -12,7 +12,7 @@
 # python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'pred'
 # python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'eval'
 # python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'anim'
-python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'latent'
+# python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'latent'
 
 # printf "Done with DLS re15k p49_m10\n"
 
@@ -24,8 +24,8 @@ python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'latent'
 
 # printf "Done with POD re15k f_extrap_100mode\n"
 
-# python -u main.py -c 're15k/compare.json'
-# printf "Done with re15k comparisons\n"
+python -u main.py -c 're15k/compare.json'
+printf "Done with re15k comparisons\n"
 
 # python -u main.py -c 're30k/pod/pod_case4_re30k.json' -m 'train'
 # python -u main.py -c 're30k/pod/pod_case4_re30k.json' -m 'pred'
@@ -51,7 +51,7 @@ python -u main.py -c 're15k/dls/p49_m10_re15k_ta5.json' -m 'latent'
 
 # printf "Done with POD re30k f_extrap_100mode\n"
 
-# python -u main.py -c 're30k/compare.json'
-# printf "Done with re30k comparisons\n"
+python -u main.py -c 're30k/compare.json'
+printf "Done with re30k comparisons\n"
 
 

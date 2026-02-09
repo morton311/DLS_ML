@@ -908,6 +908,8 @@ class runner(nn.Module):
         x = x[:nx_t]
         y = y[:ny_t]
         X, Y = np.meshgrid(x, y)
+        self.grid_x = X
+        self.grid_y = Y
 
         # find y closest  = 0.112
         y_closest = np.argmin(np.abs(y - 0.112))
@@ -985,7 +987,7 @@ class runner(nn.Module):
 
                 self.compute_TKE(pred_path)
                 self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
-                
+                self.compute_vort(true_path, pred_path, batch_size=1000)
 
                 if self.config['mode'] == 'compare':
                     # Retrieve statistics from truth and predictions for saving as keys in self
@@ -1001,9 +1003,12 @@ class runner(nn.Module):
                         results['true_idx'] = true_idx
                         results['pred_idx'] = idx
                         results['time_lag'] = time_lag
+                        results['paths_bib'] = self.paths_bib
+                        results['true_path'] = true_path
+                        results['pred_path'] = pred_path
                         
 
-                    results['X_grid'], results['Y_grid'] = X, Y 
+                    results['X_grid'], results['Y_grid'] = self.grid_x, self.grid_y
 
                     # save results to self
                     self.results = results
@@ -1200,3 +1205,79 @@ class runner(nn.Module):
                         del f_pred['rms_true']
                     f_pred.create_dataset('rms_true', data=rms_true, dtype=np.float32)
         print(f"RMS computed and saved to pred_path in fields 'rms_pred' and 'rms_true'")
+
+
+    def compute_vort(self, true_path, pred_path, batch_size=1000):
+        """
+        Compute the Vorticity for predictions and respective ground truth data.
+        The Vorticity is calculated as the curl of the velocity field at each time. 
+        Data gets saved to predictions file as a field
+        
+        """
+        import numpy as np
+        import h5py
+        from lib.plotting import curl_time
+
+        with h5py.File(pred_path, 'r+') as f_pred:
+            pred_shape = f_pred['Q_rec'].shape
+
+            num_batches = pred_shape[0] // batch_size
+            if pred_shape[0] % batch_size != 0:
+                num_batches += 1
+            vort_pred = np.zeros((pred_shape[0], pred_shape[1], pred_shape[2]), dtype=np.float32)
+            
+            if 'vort_pred' not in f_pred.keys() or any(x in self.config['overwrite'] for x in ['l', 'm', 'r']):
+                print(f"Computing Vorticity for predictions in {pred_path}")
+                
+                for i in range(num_batches):
+                    start_idx = i * batch_size
+                    end_idx = min((i + 1) * batch_size, pred_shape[0])
+                    if start_idx >= pred_shape[0]:
+                        break
+                    
+                    # Get the predictions for the current batch
+                    pred_batch = f_pred['Q_rec'][start_idx:end_idx]
+                    
+                    # Compute Vorticity for the current batch
+                    vort_batch = curl_time(self.grid_x, self.grid_y, pred_batch[...,0], pred_batch[...,1])
+                    vort_pred[start_idx:end_idx] = vort_batch
+
+                    print(f"Computed Vorticity for batch {i+1}/{num_batches}, shape: {vort_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
+                
+                # Save the Vorticity to the predictions file
+                if 'vort_pred' in f_pred.keys():
+                    del f_pred['vort_pred']
+                f_pred.create_dataset('vort_pred', data=vort_pred, dtype=np.float32)
+
+        print(f"Predicted vorticity computed and saved to pred_path in fields 'vort_pred'")
+
+
+        with h5py.File(true_path, 'r+') as f_true:
+            true_shape = f_true['UV'].shape
+
+            num_batches = true_shape[0] // batch_size
+            if true_shape[0] % batch_size != 0:
+                num_batches += 1
+            vort_true = np.zeros((true_shape[0], pred_shape[1], pred_shape[2]), dtype=np.float32)
+
+            if self.paths_bib.latent_id + '_vort_true' not in f_true.keys():
+                mean = f_true['mean'][:self.l_config.nx_t, :self.l_config.ny_t]
+                print(f"Computing Vorticity for ground truth from {true_path}")
+                for i in range(num_batches):
+                    start_idx = i * batch_size
+                    end_idx = min((i + 1) * batch_size, true_shape[0])
+                    if start_idx >= true_shape[0]:
+                        break
+                    
+                    # Get the ground truth data for the current batch
+                    true_batch = f_true['UV'][start_idx:end_idx, :self.l_config.nx_t, :self.l_config.ny_t, :] - mean[np.newaxis, ...]
+                    
+                    # Compute Vorticity for the current batch
+                    vort_batch = curl_time(self.grid_x, self.grid_y, true_batch[...,0], true_batch[...,1])
+                    vort_true[start_idx:end_idx] = vort_batch
+
+                    print(f"Computed Vorticity for batch {i+1}/{num_batches}, shape: {vort_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
+                    # Save the Vorticity to the predictions file
+                if self.paths_bib.latent_id + '_vort_true' in f_true.keys():
+                    del f_true[self.paths_bib.latent_id + '_vort_true']
+                f_true.create_dataset(self.paths_bib.latent_id + '_vort_true', data=vort_true, dtype=np.float32)
