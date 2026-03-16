@@ -83,7 +83,8 @@ DLS_ML_Polishing/
 ```jsonc
 <config_id>.json
 {
-    "data_name":        "<string>",     // e.g., "re30k"
+  "data_name":        "<string>",     // optional if data_path is provided; used for results folder naming
+  "data_path":        "<string>",     // optional absolute/relative path to .h5 (or symlink), e.g. "/mnt/datasets/ldc_30k.h5"
 
     "latent_type":      "<string>",     // "dls" or "POD"
 
@@ -114,3 +115,8 @@ DLS_ML_Polishing/
     }
 }
 ```
+
+Notes:
+- If both `data_name` and `data_path` are provided, the loader reads from `data_path` and still uses `data_name` for results directory naming.
+- If only `data_path` is provided, `data_name` is inferred from `Path(data_path).stem`.
+- If only `data_name` is provided, the loader falls back to `data/<data_name>.h5` (previous behavior).

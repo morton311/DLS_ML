@@ -6,9 +6,27 @@ class pathsBib:
         """
         Initialize paths.
         """
+        from pathlib import Path
+
         self.config_dir = 'configs/'
         self.data_dir = 'data/'
-        self.data_path = self.data_dir + config['data_name'] + '.h5'
+        data_path = config.get('data_path')
+        data_name = config.get('data_name')
+
+        if data_path:
+            data_path_obj = Path(data_path).expanduser()
+            self.data_path = str(data_path_obj)
+            if not data_name:
+                config['data_name'] = data_path_obj.stem
+        else:
+            if not data_name:
+                raise ValueError("Config must include either 'data_name' or 'data_path'.")
+            self.data_path = self.data_dir + data_name + '.h5'
+            config['data_path'] = self.data_path
+
+        if not config.get('data_name'):
+            config['data_name'] = Path(self.data_path).stem
+
         if config['latent_type'] == 'dls':
             self.latent_id = 'dls_p'  + str(config['latent_params']['patch_size']) + 'm' + str(config['latent_params']['num_modes'])
         elif config['latent_type'] == 'bvae':

@@ -98,16 +98,27 @@ class runner(nn.Module):
         print("Computing latent coefficients...")
         with h5py.File(self.paths_bib.data_path, 'r') as f:
             num_snaps = f['UV'].shape[0]
+            dim = f['UV'].shape[-1]
 
         if self.config['latent_type'] == 'dls':
-            latent_config = dls.gfem_2d_long(
-                data_path=self.paths_bib.data_path,
-                field_name='UV',
-                latent_file=self.paths_bib.latent_path,
-                patch_size=self.config['latent_params']['patch_size'],
-                num_modes=self.config['latent_params']['num_modes'],
-                batch_size=num_snaps // 20
-            )
+            if dim == 2:
+                latent_config = dls.gfem_2d_long(
+                    data_path=self.paths_bib.data_path,
+                    field_name='UV',
+                    latent_file=self.paths_bib.latent_path,
+                    patch_size=self.config['latent_params']['patch_size'],
+                    num_modes=self.config['latent_params']['num_modes'],
+                    batch_size=num_snaps // 20
+                )
+            elif dim == 3:
+                latent_config = dls.gfem_3d_long(
+                    data_path=self.paths_bib.data_path,
+                    field_name='UV',
+                    latent_file=self.paths_bib.latent_path,
+                    patch_size=self.config['latent_params']['patch_size'],
+                    num_modes=self.config['latent_params']['num_modes'],
+                    batch_size=num_snaps // 20
+                )
 
             with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'wb') as f:
                 pickle.dump(latent_config, f)

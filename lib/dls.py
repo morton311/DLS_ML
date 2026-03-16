@@ -7,7 +7,7 @@ import sys
 import h5py
 from tqdm import tqdm
 from scipy.sparse.linalg import factorized
-import lib.models as models
+# import lib.models as models
 
 def random_patch_sampling(data, patch_size):
     num_patches = 10000
@@ -799,7 +799,7 @@ def latent_eval(runner):
         p = runner.l_config.patch_size
         m = runner.l_config.num_modes
         if runner.config['latent_type'] == 'dls':
-            n = runner.l_config.num_gfem_nodes
+            n = runner.l_config.num_gfem_nodes 
             CR = M / ( d * T * n * (m+1) + d * m * p**2)
         else: 
             CR = M / (T * m + m * p**2)

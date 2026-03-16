@@ -8,6 +8,7 @@ import shutil
 import sys
 import torch
 import json
+from pathlib import Path
 import lib.init as init
 from lib.runner import runner
 
@@ -56,6 +57,12 @@ if __name__ == "__main__":
 
             case_config['mode'] = 'compare'
             case_config['overwrite'] = args.o
+
+            if not case_config.get('data_name'):
+                if case_config.get('data_path'):
+                    case_config['data_name'] = Path(case_config['data_path']).expanduser().stem
+                else:
+                    raise ValueError("Comparison config must include either 'data_name' or 'data_path'.")
             
             # remove every field in predictions except the one to be compared
             for j, key in enumerate(list(case_config['predictions'].keys())):
