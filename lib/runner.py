@@ -397,7 +397,9 @@ class runner(nn.Module):
                 print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
                 checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
                 checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
-                self.model.load_state_dict(checkpoint['model_state_dict'].consume_prefix_in_state_dict_if_present())
+                # strip 'module.' from state dict keys if present (from DDP)
+                checkpoint['model_state_dict'] = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in checkpoint['model_state_dict'].items()}
+                self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 if 'lr_scheduler_state_dict' in checkpoint:
                     self.scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
