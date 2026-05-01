@@ -71,7 +71,7 @@ def sample_series_indices(series_length, n_samples, time_lag=64, train_ahead=5, 
 
 
 
-def make_dataloader(X, Y, batch_size=32, shuffle=True):
+def make_dataloader(X, Y, batch_size=32, shuffle=True, distributed=False):
     """
     Create a DataLoader for the dataset.
     """
@@ -82,9 +82,18 @@ def make_dataloader(X, Y, batch_size=32, shuffle=True):
     dataset = TensorDataset(X, Y)
     
     # Create a DataLoader
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    if distributed:
+        import os
+        from torch.utils.data.distributed import DistributedSampler
+        world_rank = int(os.environ["RANK"])
+        sampler = DistributedSampler(dataset, seed=world_rank)  # Ensure different shuffling for each process
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, sampler=sampler)
+        return dataloader, sampler
+    else:
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        return dataloader
 
-    return dataloader
+    
 
 def normalize_data(data, mean, std):
     return (data - mean) / std

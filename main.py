@@ -17,6 +17,7 @@ parser.add_argument('-c', type=str, default='config.json', help='Name or whole p
 parser.add_argument('-o', choices=['l', 'm', 'r', 'x'], default='x', help="Overwrite: 'l' for latent space, 'm' for model, 'r' for results, or None")
 parser.add_argument('-m', choices=['train', 'eval', 'pred', 'test','latent', 'anim'], default='test', help="Mode: 'train' for training, 'eval' for evaluation")
 parser.add_argument('-log', choices=['file', 'terminal'], default='file', help="Log output to file or terminal")
+parser.add_argument('-d', choices=[True, False], default=False, help="Run in distributed mode")
 args = parser.parse_args()
 
 # Check if arg contains directory name and/or .json
@@ -103,9 +104,17 @@ if __name__ == "__main__":
         config['mode'] = args.m 
         config['name'] = os.path.basename(args.c).replace('.json', '')
         config['log'] = args.log
+        config['distributed'] = args.d
 
-        # device = ('cuda' if torch.cuda.is_available() else "cpu")
-        device = 'cpu'
+        if config['distributed']:
+            import torch.distributed as dist
+            dist.init_process_group(backend='nccl')
+            local_rank = int(os.environ["LOCAL_RANK"]) # automatically set by torchrun
+            device = torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else "cpu")
+        else:
+
+            device = ('cuda' if torch.cuda.is_available() else "cpu")
+        # device = 'cpu'
         config['device'] = device
         
         run = runner(config)
@@ -125,11 +134,14 @@ if __name__ == "__main__":
         # copy the config file to the model directory
         shutil.copy(args.c, run.paths_bib.model_dir + os.path.basename(args.c))
     
-    
+        if config['distributed']:
+            dist.destroy_process_group()
+
     print(f"{'#'*20}\t{'End of script':<20}\t{'#'*20}")
     # close the log file
     sys.stdout.close()
     sys.stderr.close()
+
     
 
 

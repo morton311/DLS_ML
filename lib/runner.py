@@ -41,6 +41,7 @@ class runner(nn.Module):
                 self.config['latent_params'].setdefault(key, value)
             
         self.device = config['device']
+        
         self.paths_bib = self._init_paths_and_logging(config)
 
         self._log_config()
@@ -331,7 +332,7 @@ class runner(nn.Module):
                         nhead=self.config['params']['nhead'],
                         num_layers=self.config['params']['num_layers'],
                         embed=self.config['params'].get('embed', 'lin')
-                        ).to(self.device)
+                        )
         elif self.config['model'] == 'lstm':
             self.model = models.LSTMModel(
                         time_lag=self.config['params']['time_lag'],
@@ -339,7 +340,7 @@ class runner(nn.Module):
                         hidden_dim=self.config['params']['d_model'],
                         num_layers=self.config['params']['num_layers'],
                         batch_size= self.config['train']['batch_size'],
-                        ).to(self.device)
+                        )
             
         elif self.config['model'] == 'f_extrap':
             self.model = None
@@ -352,6 +353,15 @@ class runner(nn.Module):
         if self.model is not None:
             print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
+        if self.config['distributed']:
+            from torch.nn.parallel import DistributedDataParallel as DDP
+            local_rank = int(os.environ["LOCAL_RANK"]) # automatically set by torchrun
+            device = torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else "cpu")
+            model = model.to(device) # copy the model to the GPU
+            self.model = DDP(self.model, device_ids=[device])
+            print("Model wrapped in DistributedDataParallel for distributed training")
+        else:
+            self.model = self.model.to(self.device)
 
     def _compile_model(self):
         """
@@ -502,10 +512,16 @@ class runner(nn.Module):
             print(f"X_test shape: {X_test.shape}, Y_test shape: {Y_test.shape}, dtype: {X_test.dtype}")
 
             # convert to data loader
-            self.train_loader = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True)
+            if self.config['distributed']:
+                self.train_loader, self.sampler = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True, distributed=True)
+            else:
+                self.train_loader = datas.make_dataloader(X_train.to(self.device), Y_train.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=True)
+
             print(f"Train loader created with {len(self.train_loader)} batches")
+
             self.test_loader = datas.make_dataloader(X_test.to(self.device), Y_test.to(self.device), batch_size=self.config['train']['batch_size'], shuffle=False)
             print(f"Test loader created with {len(self.test_loader)} batches")
+            
 
 
         else:
@@ -558,6 +574,8 @@ class runner(nn.Module):
             for epoch in range(len(losses), self.config['train']['num_epochs']):
                 self.model.train()
                 epoch_loss = 0
+                if self.config['distributed']:
+                    self.sampler.set_epoch(epoch)  # set epoch for distributed sampler if using distributed training
 
                 ## --------------------------------------- Train ---------------------------------------
                 for inputs, targets in self.train_loader: 
