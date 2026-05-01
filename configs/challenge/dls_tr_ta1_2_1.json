@@ -1,0 +1,44 @@
+{
+    "data_name":        "Challenge2_1_train",
+
+    "latent_type":      "dls",
+
+    "latent_params": {
+        "patch_size":   25,
+        "num_modes":    10
+    },
+
+    "model":            "tr_enc",
+
+    "params": {
+        "time_lag":     70,
+        "d_model":      128,
+        "nhead":        4,
+        "num_layers":   1,
+        "embed":        "lin"
+    },
+
+    "train": {
+        "train_split":  0.8,
+        "test_split":   0.1,
+        "sample_train": 0,
+        "sample_test":  0,
+        "lr":           0.001,
+        "num_epochs":   200,
+        "patience":     200,
+        "train_ahead":  1,
+        "batch_size":   128,
+        "gamma":        1
+    },
+
+    "predictions": {
+        "validation": {
+            "init":     "val",
+            "lim":      null
+        },
+        "seen": {
+            "init":     "train",
+            "lim":      null
+        }
+    }
+}

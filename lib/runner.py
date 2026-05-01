@@ -374,7 +374,7 @@ class runner(nn.Module):
             
             self.criterion = nn.MSELoss()
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
-            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.99)
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.config['train'].get('gamma', 0.99))
 
             print(f"Loss function: {self.criterion}")
             print(f"Optimizer: {self.optimizer}")
