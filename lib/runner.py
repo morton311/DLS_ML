@@ -357,6 +357,7 @@ class runner(nn.Module):
             from torch.nn.parallel import DistributedDataParallel as DDP
             local_rank = int(os.environ["LOCAL_RANK"]) # automatically set by torchrun
             device = torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else "cpu")
+            self.model.to(device)
             self.model = DDP(self.model, device_ids=[local_rank], output_device=local_rank)
             print("Model wrapped in DistributedDataParallel for distributed training")
         else:
