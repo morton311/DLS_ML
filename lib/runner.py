@@ -1,6 +1,6 @@
 import os
 import sys
-from directory_tree import DisplayTree
+# from directory_tree import DisplayTree
 import h5py
 import pickle
 import copy
@@ -213,7 +213,7 @@ class runner(nn.Module):
                 beta_scheduler = models.betaScheduler(self.config['latent_params']['beta'])
 
                 bvae, losses = models.train_bvae(
-                    model=bvae.to('cuda'),
+                    model=bvae.to(self.device),
                     train_loader=train_loader,
                     test_loader=test_loader,
                     optimizer=optimizer,
@@ -349,7 +349,7 @@ class runner(nn.Module):
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
             self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
-        if self.model != None:
+        if self.model is not None:
             print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
 
@@ -360,7 +360,7 @@ class runner(nn.Module):
         # Define the loss function and optimizer
         print(f"{'#'*20}\t{'Compiling model...':<20}\t{'#'*20}")
 
-        if self.model != None: 
+        if self.model is not None: 
             
             self.criterion = nn.MSELoss()
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
@@ -427,7 +427,7 @@ class runner(nn.Module):
         """
         Get training and test data as torch tensors, minimizing memory usage.
         """
-        if self.model != None:
+        if self.model is not None:
             print('Getting training and test data')
             tl = self.config['params']['time_lag']
             ta = self.config['train']['train_ahead']
@@ -535,7 +535,7 @@ class runner(nn.Module):
 
     def _model_fit(self):
         
-        if self.model != None:
+        if self.model is not None:
             if self.checkpointed:
                 best_epoch = self.epoch
                 losses = self.losses
@@ -667,7 +667,7 @@ class runner(nn.Module):
     def pred(self):
         print(f"{'#'*20}\t{'Predicting...':<20}\t{'#'*20}")
 
-        if self.model != None:
+        if self.model is not None:
             
             time_lag = self.config['params']['time_lag']
             with h5py.File(self.paths_bib.latent_path, 'r') as f:
@@ -906,7 +906,7 @@ class runner(nn.Module):
         """
         import lib.plotting as plots
         print(f"{'#'*20}\t{'Evaluating model...':<20}\t{'#'*20}")
-        if self.model != None:
+        if self.model is not None:
             self.model.eval()
         nx = self.l_config.nx
         ny = self.l_config.ny
@@ -1030,7 +1030,7 @@ class runner(nn.Module):
                 else:
                     # plot losses, RMS, TKE, Coherence
                     print(f'\nGenerating plots, saving')
-                    if self.model != None:
+                    if self.model is not None:
                         plots.plot_loss(self)
                         print('Loss plot done')
                     plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)

@@ -1,20 +1,20 @@
 {
-    "data_name":        "ldc_15k",
+    "data_name":        "Challenge2_1_train",
 
     "latent_type":      "pod",
 
     "latent_params": {
         "patch_size":   0,
-        "num_modes":    200
+        "num_modes":    25
     },
 
-    "model":            "tr_enc",
+    "model":            "lstm",
 
     "params": {
-        "time_lag":     64,
-        "d_model":      512,
-        "nhead":        4,
-        "num_layers":   4,
+        "time_lag":     70,
+        "d_model":      128,
+        "nhead":        1,
+        "num_layers":   1,
         "embed":        "lin"
     },
 
@@ -24,10 +24,10 @@
         "sample_train": 0,
         "sample_test":  0,
         "lr":           0.001,
-        "num_epochs":   1000,
-        "patience":     25,
-        "train_ahead":  5,
-        "batch_size":   256
+        "num_epochs":   200,
+        "patience":     200,
+        "train_ahead":  1,
+        "batch_size":   128
     },
 
     "predictions": {
@@ -38,12 +38,6 @@
         "seen": {
             "init":     "train",
             "lim":      null
-        },
-        "long":
-        {
-            "init":     "val",
-            "lim":      15000,
-            "arg":      "extrap"
         }
     }
 }

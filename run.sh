@@ -1,5 +1,11 @@
 #!/bin/bash
 
+python -u main.py -c 'challenge/lstm_challenge.json' -m 'train'
+python -u main.py -c 'challenge/lstm_challenge.json' -m 'pred'
+python -u main.py -c 'challenge/lstm_challenge.json' -m 'eval'
+python -u main.py -c 'challenge/lstm_challenge.json' -m 'anim'
+python -u main.py -c 'challenge/lstm_challenge.json' -m 'latent'
+
 # python -u main.py -c 're15k/pod/pod_case2_re15k.json' -m 'train'
 # python -u main.py -c 're15k/pod/pod_case2_re15k.json' -m 'pred'
 # python -u main.py -c 're15k/pod/pod_case2_re15k.json' -m 'eval'
@@ -24,8 +30,8 @@
 
 # printf "Done with POD re15k f_extrap_100mode\n"
 
-python -u main.py -c 're15k/compare.json'
-printf "Done with re15k comparisons\n"
+# python -u main.py -c 're15k/compare.json'
+# printf "Done with re15k comparisons\n"
 
 # python -u main.py -c 're30k/pod/pod_case4_re30k.json' -m 'train'
 # python -u main.py -c 're30k/pod/pod_case4_re30k.json' -m 'pred'
@@ -51,7 +57,7 @@ printf "Done with re15k comparisons\n"
 
 # printf "Done with POD re30k f_extrap_100mode\n"
 
-python -u main.py -c 're30k/compare.json'
-printf "Done with re30k comparisons\n"
+# python -u main.py -c 're30k/compare.json'
+# printf "Done with re30k comparisons\n"
 
 

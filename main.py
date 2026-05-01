@@ -104,7 +104,8 @@ if __name__ == "__main__":
         config['name'] = os.path.basename(args.c).replace('.json', '')
         config['log'] = args.log
 
-        device = ('cuda' if torch.cuda.is_available() else "cpu")
+        # device = ('cuda' if torch.cuda.is_available() else "cpu")
+        device = 'cpu'
         config['device'] = device
         
         run = runner(config)
