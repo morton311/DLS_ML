@@ -1,0 +1,34 @@
+  ___  ____  ____
+ / __)/ ___)(  __)
+( (__ \___ \ ) _)
+ \___)(____/(____) Release Information
+****************************************
+Computational Science Environment
+
+Build Date: 20231122
+Release: 2023Q3
+
+NOTE: To access CSE modules, first module load cseinit or module load cseinit-noloads
+      module load cseinit --> loads environment of the CSE build and provides access to CSE modules 
+      module load cseinit-noloads --> makes no changes to existing module environment and provides access to CSE modules
+      CSE modules will work correctly after loading cseinit, as prerequisites modules are loaded and conflicts unloaded
+      CSE module cseinit-noloads allows the user to choose among compatible prerequisites.
+      For Intel build of CSE, module setup is the same except use module cseinit-intel instead.
+
+OpenMPI 3.1.6 is default for Workstations and some HPCs
+CSE Intel and Cray builds utilize a system's MPI whenever possible
+OpenMPI 2.1.6 is available for standalone use, and not compatible with CSE's cse/python module
+
+CSE modules cse/python3 and cse/miniforge/latest are identical with conda available
+CSE module  cse/python (python2) and other python2 modules cannot be utilized with cse/miniforge (python3)
+Python 3.12.8 provided by cse/miniforge/latest
+
+Contact Information
+E-Mail:  help@helpdesk.hpc.mil
+Website: https://centers.hpc.mil/users/CSEQuickRef.html
+
+Loading torch_module
+  Unloading conflict: amd/aocc/4.1.0 amd/aocl/aocc/4.1.0
+    penguin/openmpi/4.1.6/aocc-4.0.0
+  Loading requirement: cse/openmpi/latest cseinit cse/python3/latest
+    cse/git/latest cuda/cuda-11.8

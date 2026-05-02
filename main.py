@@ -104,7 +104,10 @@ if __name__ == "__main__":
         config['mode'] = args.m 
         config['name'] = os.path.basename(args.c).replace('.json', '')
         config['log'] = args.log
-        config['distributed'] = args.d
+        if args.d == 'True':
+            config['distributed'] = True
+        else:
+            config['distributed'] = False
 
         if config['distributed']:
             import torch.distributed as dist
