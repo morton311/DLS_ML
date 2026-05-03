@@ -66,8 +66,8 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
 
     with h5py.File(pred_path, 'r') as f:
-        rms_true = f['rms_true'][:].transpose(0,2,1) # transpose to (2, ny, nx)
-        rms_pred = f['rms_pred'][:].transpose(0,2,1) # transpose to (2, ny, nx)
+        rms_true = f['rms_true'][:]
+        rms_pred = f['rms_pred'][:]
     # RMS error 
     rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
     # RMS error on u
