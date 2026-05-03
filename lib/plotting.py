@@ -957,7 +957,7 @@ def curl_time(x,y,u,v):
     Calculate the curl for multiple snapshots
     """
     num_snaps = u.shape[0]
-    rot = np.zeros((num_snaps, x.shape[0], x.shape[1]), dtype=u.dtype)
+    rot = np.zeros((num_snaps, x.shape[1], x.shape[0]), dtype=u.dtype)
     for i in range(num_snaps):
         rot[i] = curl(x, y, u[i], v[i])
     return rot
