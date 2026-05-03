@@ -1286,7 +1286,7 @@ class runner(nn.Module):
                     pred_batch = f_pred['Q_rec'][start_idx:end_idx]
                     
                     # Compute Vorticity for the current batch
-                    vort_batch = curl_time(self.x_grid, self.y_grid, pred_batch[...,0], pred_batch[...,1])
+                    vort_batch = curl_time(self.x_grid_t, self.y_grid_t, pred_batch[...,0], pred_batch[...,1])
                     vort_pred[start_idx:end_idx] = vort_batch
 
                     print(f"Computed Vorticity for batch {i+1}/{num_batches}, shape: {vort_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
@@ -1320,7 +1320,7 @@ class runner(nn.Module):
                     true_batch = f_true['UV'][start_idx:end_idx, :self.l_config.nx_t, :self.l_config.ny_t, :] - mean[np.newaxis, ...]
                     
                     # Compute Vorticity for the current batch
-                    vort_batch = curl_time(self.x_grid, self.y_grid, true_batch[...,0], true_batch[...,1])
+                    vort_batch = curl_time(self.x_grid_t, self.y_grid_t, true_batch[...,0], true_batch[...,1])
                     vort_true[start_idx:end_idx] = vort_batch
 
                     print(f"Computed Vorticity for batch {i+1}/{num_batches}, shape: {vort_batch.shape}, start_idx: {start_idx}, end_idx: {end_idx}")
