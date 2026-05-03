@@ -339,9 +339,10 @@ def curl_2d(x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e+
         return out
 
       c_valid = c[idx]
+      d_c = np.diff(c_valid)
       v_valid = ma.filled(v_ma[idx], np.nan)
       # edge_order=1 preserves first-order forward/backward differencing at endpoints.
-      dv_dc = np.gradient(v_valid, c_valid, edge_order=1)
+      dv_dc = np.gradient(v_valid, c_valid.squeeze(), edge_order=1)
       out[idx] = dv_dc
       return out
 
