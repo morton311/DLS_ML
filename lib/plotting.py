@@ -432,8 +432,9 @@ def plot_points(runner):
     # plt.axis('off')
     plt.xticks([])
     plt.yticks([])
-    plt.xlim(0, 1.0)
-    plt.ylim(0, 1.0)
+
+    plt.xlim(min(x), max(x))
+    plt.ylim(min(y), max(y))
     # plt.tight_layout()
 
     plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=600)
