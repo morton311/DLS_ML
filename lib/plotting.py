@@ -86,6 +86,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
 
     x, y = runner.x, runner.y
     X, Y = runner.x_grid_t, runner.y_grid_t
+    print(f"X shape: {X.shape}, Y shape: {Y.shape}, rms_true shape: {rms_true.shape}")
 
     RMS_max = np.max(rms_true, axis=(1,2), keepdims=True)
     rms_true_plot = rms_true / RMS_max
