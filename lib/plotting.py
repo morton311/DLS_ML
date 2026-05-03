@@ -84,11 +84,8 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     nx_t = runner.l_config.nx_t
     ny_t = runner.l_config.ny_t
 
-    x = np.linspace(0, 1, nx)
-    y = np.linspace(0, 1, ny)
-    x = x[:nx_t]
-    y = y[:ny_t]
-    X, Y = np.meshgrid(x, y)
+    x, y = runner.x, runner.y
+    X, Y = runner.x_grid_t, runner.y_grid_t
 
     RMS_max = np.max(rms_true, axis=(1,2), keepdims=True)
     rms_true_plot = rms_true / RMS_max
@@ -396,10 +393,8 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
 def plot_points(runner):
     nx = runner.l_config.nx
     ny = runner.l_config.ny
-    x = np.linspace(0, 1, nx)
-    y = np.linspace(0, 1, ny)
-
-    X, Y = np.meshgrid(x, y)
+    x, y = runner.x, runner.y
+    X, Y = runner.x_grid, runner.y_grid
 
     # find y closest  = 0.112
     y_closest = np.argmin(np.abs(y - 0.112))

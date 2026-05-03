@@ -79,6 +79,14 @@ class runner(nn.Module):
             else:
                 print(f"{key}: {val}")
 
+    def _get_grid(self):
+        with h5py.File(self.paths_bib.data_path, 'r') as f:
+            self.x = f['x'][:]
+            self.y = f['y'][:]
+            self.z = f['z'][:] if 'z' in f else None
+            self.x_grid = f['x_grid'][:]
+            self.y_grid = f['y_grid'][:]
+            self.z_grid = f['z_grid'][:] if 'z_grid' in f else None
 
     def _get_data(self):
         """
@@ -934,13 +942,14 @@ class runner(nn.Module):
         ny_t = self.l_config.ny_t
 
         # point probe info
-        x = np.linspace(0, 1, nx)
-        y = np.linspace(0, 1, ny)
-        x = x[:nx_t]
-        y = y[:ny_t]
-        X, Y = np.meshgrid(x, y)
-        self.grid_x = X
-        self.grid_y = Y
+        self._get_grid()
+        self.x_t = self.x[:nx_t]
+        self.y_t = self.y[:ny_t]
+        x = self.x
+        y = self.y
+
+        self.x_grid_t, self.y_grid_t = self.x_grid[:nx_t, :ny_t], self.y_grid[:nx_t, :ny_t]
+        
 
         # find y closest  = 0.112
         y_closest = np.argmin(np.abs(y - 0.112))
@@ -1039,7 +1048,7 @@ class runner(nn.Module):
                         results['pred_path'] = pred_path
                         
 
-                    results['X_grid'], results['Y_grid'] = self.grid_x, self.grid_y
+                    results['X_grid'], results['Y_grid'] = self.x_grid, self.y_grid
 
                     # save results to self
                     self.results = results
