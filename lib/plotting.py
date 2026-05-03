@@ -427,7 +427,7 @@ def plot_points(runner):
     vmax = np.max(np.abs(vort_mean))
 
     # Create a plot that shows the points in the domain
-    plt.figure(figsize=(3, 3))
+    plt.figure()
     plt.contourf(X, Y, vort_mean, cmap='seismic', levels=1000, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
