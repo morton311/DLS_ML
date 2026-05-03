@@ -391,7 +391,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     plt.close()
 
 def plot_points(runner):
-    from .curl_2d import curl_2d
+    from lib.curl_2d import curl_2d
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     x, y = runner.x, runner.y
@@ -954,9 +954,9 @@ def curl_time(x,y,u,v):
     """
     Calculate the curl for multiple snapshots
     """
-    from .curl_2d import curl_2d
+    from lib.curl_2d import curl_2d
     num_snaps = u.shape[0]
-    rot = np.zeros((num_snaps, x.shape[0], x.shape[1]), dtype=u.dtype)
+    rot = np.zeros((num_snaps, x.shape[0], y.shape[0]), dtype=u.dtype)
     for i in range(num_snaps):
         rot[i] = curl_2d(x, y, u[i], v[i])
     return rot
