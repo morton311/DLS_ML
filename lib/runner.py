@@ -950,7 +950,7 @@ class runner(nn.Module):
 
         self.x_grid_t, self.y_grid_t = self.x_grid[:nx_t, :ny_t], self.y_grid[:nx_t, :ny_t]
         
-        if self.config['data_name'].contains('ldc'):
+        if 'ldc' in self.config['data_name']:
             # find y closest  = 0.112
             y_closest = np.argmin(np.abs(y - 0.112))
             # print('y_closest: ', y[y_closest])
