@@ -66,8 +66,8 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
 
     with h5py.File(pred_path, 'r') as f:
-        rms_true = f['rms_true'][:]
-        rms_pred = f['rms_pred'][:]
+        rms_true = f['rms_true'][:].transpose(0,2,1) # transpose to (2, ny, nx)
+        rms_pred = f['rms_pred'][:].transpose(0,2,1) # transpose to (2, ny, nx)
     # RMS error 
     rms_error = l2_err_norm(true=rms_true, pred=rms_pred)
     # RMS error on u
@@ -99,7 +99,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     ticks = np.linspace(0, 1, 6)
     
     fig, axs = plt.subplots(1, 2, figsize=(size*width,size*width/2))
-    c1 = axs[0].contourf(Y, X, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c1 = axs[0].contourf(X,Y, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True U RMS')
     axs[0].set_xticks([])
     axs[0].set_yticks([])
@@ -109,7 +109,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     axs[0].set_ylim(ymin, ymax)
     axs[0].set_aspect('equal')
 
-    c2 = axs[1].contourf(Y, X, rms_pred_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c2 = axs[1].contourf(X,Y, rms_pred_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[1].set_title('Predicted U RMS')
     axs[1].set_xticks([])
     axs[1].set_yticks([])
@@ -123,7 +123,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
-    c1 = axs[0].contourf(Y, xmin, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c1 = axs[0].contourf(X,Ymin, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True V RMS')
     axs[0].set_xticks([])
     axs[0].set_yticks([])
@@ -131,7 +131,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     axs[0].set_ylim(ymin, ymax)
     axs[0].set_aspect('equal')
 
-    c2 = axs[1].contourf(Y, X, rms_pred_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c2 = axs[1].contourf(X,Y, rms_pred_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[1].set_title('Predicted V RMS')
     axs[1].set_xticks([])
     axs[1].set_yticks([])
