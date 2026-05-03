@@ -41,28 +41,35 @@
 
 #----------------------- Overall Module Imports ------------------------
 
-#- The "from __future__ import" line as the first line in the module
-#  enables nested-scope access for Python versions prior to 2.2.
-#  From 2.2 and on nested-scope access is automatic:
+#- Modern array dependencies:
 
-from __future__ import nested_scopes
+import numpy as np
+import numpy.ma as ma
+import importlib
 
 
-#- Set module version to package version:
+#- Set module version to package version if available:
 
-import gemath_version
-__version__ = gemath_version.version
-__author__  = gemath_version.author
-__date__    = gemath_version.date
-__credits__ = gemath_version.credits
-del gemath_version
+try:
+  gemath_version = importlib.import_module("gemath_version")
+
+  __version__ = gemath_version.version
+  __author__ = gemath_version.author
+  __date__ = gemath_version.date
+  __credits__ = gemath_version.credits
+  del gemath_version
+except Exception:
+  __version__ = "unknown"
+  __author__ = "unknown"
+  __date__ = "unknown"
+  __credits__ = "unknown"
 
 
 
 
 #------------- Overall Function:  Documentation and Import -------------
 
-def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e+6):
+def curl_2d(x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e+6):
     """Curl of a vector F on a 2-D "rectangular" grid.
 
     The 2-D grid F is defined on is rectangular, meaning that while
@@ -287,10 +294,56 @@ def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e
     >>> ['%.7g' % curl[45,i] for i in range(88,92)]
     ['-1.224875e-07', '-6.128107e-08', '1e+20', '1e+20']
     """
-    import MA
-    import Numeric as N
-    from has_close import has_close
-    from can_use_sphere import can_use_sphere
+
+    x = np.asarray(x)
+    y = np.asarray(y)
+    Fx = np.asarray(Fx)
+    Fy = np.asarray(Fy)
+    R_sphere = np.asarray(R_sphere) if np.ndim(R_sphere) > 0 else R_sphere
+
+    def _has_missing(arr):
+      return bool(np.any(np.isclose(np.asarray(arr), missing, rtol=1e-12, atol=0.0)))
+
+    def _can_use_sphere_domain(x_coords, y_coords):
+      """Use legacy checker when available, else apply a minimal spherical-domain check."""
+      try:
+        can_use_sphere = importlib.import_module("can_use_sphere")
+        return can_use_sphere.can_use_sphere(x_coords, y_coords)[0] == 1
+      except Exception:
+        x1 = np.asarray(x_coords, dtype=float)
+        y1 = np.asarray(y_coords, dtype=float)
+        if x1.ndim != 1 or y1.ndim != 1 or x1.size < 2 or y1.size < 2:
+          return False
+        dx = np.diff(x1)
+        dy = np.diff(y1)
+        if not (np.all(dx > 0.0) and np.all(dy > 0.0)):
+          return False
+        dx_mean = float(np.mean(dx))
+        lon_span = float(x1[-1] - x1[0])
+        has_global_lon = np.isclose(lon_span + dx_mean, 360.0, atol=1e-3) or np.isclose(lon_span, 360.0, atol=1e-3)
+        has_poles = y1[0] <= -89.999 and y1[-1] >= 89.999
+        return bool(has_global_lon and has_poles)
+
+    def _order1_deriv_1d(coords, values, missing_val):
+      """First-order derivative on nonuniform spacing with masked support."""
+      c = np.asarray(coords, dtype=float)
+      v_ma = ma.masked_values(np.asarray(values, dtype=float), missing_val, copy=False)
+      out = np.full(v_ma.shape, missing_val, dtype=float)
+
+      valid = ~ma.getmaskarray(v_ma)
+      if not np.any(valid):
+        return out
+
+      idx = np.where(valid)[0]
+      if idx.size == 1:
+        return out
+
+      c_valid = c[idx]
+      v_valid = ma.filled(v_ma[idx], np.nan)
+      # edge_order=1 preserves first-order forward/backward differencing at endpoints.
+      dv_dc = np.gradient(v_valid, c_valid, edge_order=1)
+      out[idx] = dv_dc
+      return out
 
 
 
@@ -307,21 +360,17 @@ def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e
         differencing, as applicable) in Cartesian coordinates (see 
         Glickman [2000], p. 194).
         """
-        from deriv import deriv
-
-        dFy_dx_N = N.zeros( (len(y), len(x)), typecode=N.Float )
-        dFx_dy_N = N.zeros( (len(y), len(x)), typecode=N.Float )
+        dFy_dx_N = np.zeros((len(y), len(x)), dtype=float)
+        dFx_dy_N = np.zeros((len(y), len(x)), dtype=float)
 
         for iy in range(len(y)):
-            dFy_dx_N[iy,:] = deriv( x, N.ravel(Fy[iy,:]) \
-                                  , missing=missing, algorithm='order1')
+          dFy_dx_N[iy, :] = _order1_deriv_1d(x, np.ravel(Fy[iy, :]), missing)
 
         for ix in range(len(x)):
-            dFx_dy_N[:,ix] = deriv( y, N.ravel(Fx[:,ix]) \
-                                  , missing=missing, algorithm='order1')
+          dFx_dy_N[:, ix] = _order1_deriv_1d(y, np.ravel(Fx[:, ix]), missing)
 
-        dFy_dx = MA.masked_values(dFy_dx_N, missing, copy=0)
-        dFx_dy = MA.masked_values(dFx_dy_N, missing, copy=0)
+        dFy_dx = ma.masked_values(dFy_dx_N, missing, copy=False)
+        dFx_dy = ma.masked_values(dFx_dy_N, missing, copy=False)
 
         return dFy_dx - dFx_dy
 
@@ -353,52 +402,48 @@ def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e
         * ddFx is d(Fx * cos(yrad)) / d(yrad) as a masked array.  The 
           version with a "_N" suffix means the Numeric version.
         """
-        from deriv import deriv
-
-        xrad = x * N.pi/180.0
-        yrad = y * N.pi/180.0
+        xrad = x * np.pi / 180.0
+        yrad = y * np.pi / 180.0
 
 
         #- Derivative preliminaries:
 
-        ddFy_N = N.zeros( (len(yrad), len(xrad)), typecode=N.Float )
-        ddFx_N = N.zeros( (len(yrad), len(xrad)), typecode=N.Float )
+        ddFy_N = np.zeros((len(yrad), len(xrad)), dtype=float)
+        ddFx_N = np.zeros((len(yrad), len(xrad)), dtype=float)
 
         for iy in range(len(yrad)):
-            ddFy_N[iy,:] = deriv( xrad, N.ravel(Fy[iy,:]) \
-                                , missing=missing, algorithm='order1')
+          ddFy_N[iy, :] = _order1_deriv_1d(xrad, np.ravel(Fy[iy, :]), missing)
 
         for ix in range(len(xrad)):
-            tmp_MA = MA.masked_values(N.ravel(Fx[:,ix]), missing, copy=0)
-            tmp_N  = MA.filled(tmp_MA * N.cos(yrad), missing)
-            ddFx_N[:,ix] = deriv( yrad, tmp_N \
-                                , missing=missing, algorithm='order1')
+          tmp_MA = ma.masked_values(np.ravel(Fx[:, ix]), missing, copy=False)
+          tmp_N = ma.filled(tmp_MA * np.cos(yrad), missing)
+          ddFx_N[:, ix] = _order1_deriv_1d(yrad, tmp_N, missing)
 
-        ddFy = MA.masked_values(ddFy_N, missing, copy=0)
-        ddFx = MA.masked_values(ddFx_N, missing, copy=0)
+        ddFy = ma.masked_values(ddFy_N, missing, copy=False)
+        ddFx = ma.masked_values(ddFx_N, missing, copy=False)
 
 
         #- Calculate the curl:
 
-        tmpr = ( ddFy - ddFx ) / \
-               ( R_sphere * N.reshape( N.repeat(N.cos(yrad),len(xrad)) \
-                                     , (len(yrad),len(xrad)) ) )
+        tmpr = (ddFy - ddFx) / (
+          R_sphere * np.reshape(np.repeat(np.cos(yrad), len(xrad)), (len(yrad), len(xrad)))
+        )
 
 
         #- Make points "near" poles be missing and return:
 
         np_mask_lat =  88.0
         sp_mask_lat = -88.0
-        yarr = N.reshape( N.repeat(y,len(x)), (len(y),len(x)) )
+        yarr = np.reshape(np.repeat(y, len(x)), (len(y), len(x)))
 
-        np_mask = MA.make_mask( N.where(yarr > np_mask_lat, 1, 0) )
-        sp_mask = MA.make_mask( N.where(yarr < sp_mask_lat, 1, 0) )
+        np_mask = ma.make_mask(np.where(yarr > np_mask_lat, 1, 0))
+        sp_mask = ma.make_mask(np.where(yarr < sp_mask_lat, 1, 0))
 
-        tmpr_mask = tmpr.mask()
-        tmpr_mask = MA.mask_or(tmpr_mask, np_mask)
-        tmpr_mask = MA.mask_or(tmpr_mask, sp_mask)
+        tmpr_mask = ma.getmaskarray(tmpr)
+        tmpr_mask = ma.mask_or(tmpr_mask, np_mask)
+        tmpr_mask = ma.mask_or(tmpr_mask, sp_mask)
 
-        return MA.masked_array(tmpr, mask=tmpr_mask)
+        return ma.masked_array(tmpr, mask=tmpr_mask)
 
 
 
@@ -421,17 +466,20 @@ def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e
         ing stdout/stderr turned out to be too difficult; just
         altering the sys attributes didn't work.
         """
-        import sphere, MA
+        try:
+          sphere = importlib.import_module("sphere")
+        except Exception as exc:
+          raise ValueError("curl_2d: spherepack algorithm unavailable (missing 'sphere' package)") from exc
 
-        sph_obj = sphere.Sphere( x.astype(MA.Float32) \
-                               , y.astype(MA.Float32) )
-        if N.allclose(N.array(R_sphere), sphere.radius):
-            curl = sph_obj.vrt( Fx.astype(MA.Float32) \
-                              , Fy.astype(MA.Float32) )
+        sph_obj = sphere.Sphere(x.astype(np.float32), y.astype(np.float32))
+        if np.allclose(np.array(R_sphere), sphere.radius):
+          curl = sph_obj.vrt(Fx.astype(np.float32), Fy.astype(np.float32))
         else:
-            curl = sph_obj.vrt( Fx.astype(MA.Float32) \
-                              , Fy.astype(MA.Float32) ) \
-                 * sphere.radius / R_sphere
+          curl = (
+            sph_obj.vrt(Fx.astype(np.float32), Fy.astype(np.float32))
+            * sphere.radius
+            / R_sphere
+          )
 
         return curl
 
@@ -443,35 +491,33 @@ def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e
     #- Choose algorithm to compute curl:
     
     if algorithm == 'default':
-        _calculate_curl = _order1_cartesian_curl
+      _calculate_curl = _order1_cartesian_curl
 
     elif algorithm == 'default_spherical':
-        if (can_use_sphere(x,y)[0] == 1) and \
-           (not has_close(Fx, missing)) and \
-           (not has_close(Fy, missing)):
-            _calculate_curl = _spherepack_curl
-        else:
-            _calculate_curl = _order1_spherical_curl
-
-    elif algorithm == 'order1_cartesian':
-        _calculate_curl = _order1_cartesian_curl
-
-    elif algorithm == 'order1_spherical':
+      if (not _has_missing(Fx)) and (not _has_missing(Fy)) and _can_use_sphere_domain(x, y):
+        _calculate_curl = _spherepack_curl
+      else:
         _calculate_curl = _order1_spherical_curl
 
+    elif algorithm == 'order1_cartesian':
+      _calculate_curl = _order1_cartesian_curl
+
+    elif algorithm == 'order1_spherical':
+      _calculate_curl = _order1_spherical_curl
+
     elif algorithm == 'spherepack':
-        if has_close(Fx, missing) or has_close(Fy, missing):
-            raise ValueError, "curl_2d:  has missing values"
-        else:
-            _calculate_curl = _spherepack_curl
+      if _has_missing(Fx) or _has_missing(Fy):
+        raise ValueError("curl_2d:  has missing values")
+      else:
+        _calculate_curl = _spherepack_curl
 
     else:
-        raise ValueError, "curl_2d:  bad algorithm"
+        raise ValueError("curl_2d:  bad algorithm")
 
 
     #- Calculate curl and return from function:
 
-    return MA.filled( _calculate_curl(), missing )
+    return ma.filled(_calculate_curl(), missing)
 
 
 
