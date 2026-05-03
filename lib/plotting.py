@@ -398,12 +398,22 @@ def plot_points(runner):
     x, y = runner.x, runner.y
     X, Y = runner.x_grid, runner.y_grid
 
-    # find y closest  = 0.112
-    y_closest = np.argmin(np.abs(y - 0.112))
+    if 'ldc' in runner.config['data_name']:
+        # find y closest  = 0.112
+        y_closest = np.argmin(np.abs(y - 0.112))
+        # print('y_closest: ', y[y_closest])
 
-    # find x closest to 0.233 and 0.765
-    x_closest1 = np.argmin(np.abs(x - 0.233))
-    x_closest2 = np.argmin(np.abs(x - 0.765))
+        # find x closest to 0.233 and 0.765
+        x_closest1 = np.argmin(np.abs(x - 0.233))
+        x_closest2 = np.argmin(np.abs(x - 0.765))
+        # print('x_closest1: ', x[x_closest1])
+        # print('x_closest2: ', x[x_closest2])
+
+    else: 
+        y_closest = np.argmin(np.abs(y))
+
+        x_closest1 = np.argmin(np.abs(x - 2))
+        x_closest2 = np.argmin(np.abs(x - 5.5))
 
     point_1 = (x[x_closest1], y[y_closest])
     point_2 = (x[x_closest2], y[y_closest])
