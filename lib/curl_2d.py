@@ -361,14 +361,14 @@ def curl_2d(x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e+
         differencing, as applicable) in Cartesian coordinates (see 
         Glickman [2000], p. 194).
         """
-        dFy_dx_N = np.zeros((len(y), len(x)), dtype=float)
-        dFx_dy_N = np.zeros((len(y), len(x)), dtype=float)
+        dFy_dx_N = np.zeros((len(x), len(y)), dtype=float)
+        dFx_dy_N = np.zeros((len(x), len(y)), dtype=float)
 
         for iy in range(len(y)):
-          dFy_dx_N[iy, :] = _order1_deriv_1d(x, np.ravel(Fy[iy, :]), missing)
+          dFy_dx_N[:, iy] = _order1_deriv_1d(x, np.ravel(Fy[:, iy]), missing)
 
         for ix in range(len(x)):
-          dFx_dy_N[:, ix] = _order1_deriv_1d(y, np.ravel(Fx[:, ix]), missing)
+          dFx_dy_N[ix, :] = _order1_deriv_1d(y, np.ravel(Fx[ix, :]), missing)
 
         dFy_dx = ma.masked_values(dFy_dx_N, missing, copy=False)
         dFx_dy = ma.masked_values(dFx_dy_N, missing, copy=False)
