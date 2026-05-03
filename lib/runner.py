@@ -950,16 +950,22 @@ class runner(nn.Module):
 
         self.x_grid_t, self.y_grid_t = self.x_grid[:nx_t, :ny_t], self.y_grid[:nx_t, :ny_t]
         
+        if self.config['data_name'].contains('ldc'):
+            # find y closest  = 0.112
+            y_closest = np.argmin(np.abs(y - 0.112))
+            # print('y_closest: ', y[y_closest])
 
-        # find y closest  = 0.112
-        y_closest = np.argmin(np.abs(y - 0.112))
-        # print('y_closest: ', y[y_closest])
+            # find x closest to 0.233 and 0.765
+            x_closest1 = np.argmin(np.abs(x - 0.233))
+            x_closest2 = np.argmin(np.abs(x - 0.765))
+            # print('x_closest1: ', x[x_closest1])
+            # print('x_closest2: ', x[x_closest2])
 
-        # find x closest to 0.233 and 0.765
-        x_closest1 = np.argmin(np.abs(x - 0.233))
-        x_closest2 = np.argmin(np.abs(x - 0.765))
-        # print('x_closest1: ', x[x_closest1])
-        # print('x_closest2: ', x[x_closest2])
+        else: 
+            y_closest = np.argmin(np.abs(y))
+
+            x_closest1 = np.argmin(np.abs(x - 2))
+            x_closest2 = np.argmin(np.abs(x - 5.5))
 
         point_1 = (x[x_closest1], y[y_closest])
         point_2 = (x[x_closest2], y[y_closest])
@@ -987,6 +993,7 @@ class runner(nn.Module):
                 with h5py.File(os.path.join(self.paths_bib.predictions_dir, pred_file), 'r') as f:
                     len_pred = f['Q_rec'].shape[0]
                     idx = f['idx'][:]
+
                     uv_rec_p1 = f['Q_rec'][:len_pred, point_1_idx[0], point_1_idx[1], :]
                     uv_rec_p2 = f['Q_rec'][:len_pred, point_2_idx[0], point_2_idx[1], :]
 
