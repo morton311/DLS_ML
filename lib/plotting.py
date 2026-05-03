@@ -82,7 +82,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
-    ny_t = runner.l_config.nx_t
+    ny_t = runner.l_config.ny_t
 
     x = np.linspace(0, 1, nx)
     y = np.linspace(0, 1, ny)
@@ -99,20 +99,22 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     ticks = np.linspace(0, 1, 6)
     
     fig, axs = plt.subplots(1, 2, figsize=(size*width,size*width/2))
-    c1 = axs[0].contourf(X, Y, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c1 = axs[0].contourf(Y, X, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True U RMS')
     axs[0].set_xticks([])
     axs[0].set_yticks([])
-    axs[0].set_xlim(0, 1.0)
-    axs[0].set_ylim(0, 1.0)
+    xmin, xmax = min(x), max(x)
+    ymin, ymax = min(y), max(y)
+    axs[0].set_xlim(xmin, xmax)
+    axs[0].set_ylim(ymin, ymax)
     axs[0].set_aspect('equal')
 
-    c2 = axs[1].contourf(X, Y, rms_pred_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c2 = axs[1].contourf(Y, X, rms_pred_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[1].set_title('Predicted U RMS')
     axs[1].set_xticks([])
     axs[1].set_yticks([])
-    axs[1].set_xlim(0, 1.0)
-    axs[1].set_ylim(0, 1.0)
+    axs[1].set_xlim(xmin, xmax)
+    axs[1].set_ylim(ymin, ymax)
     axs[1].set_aspect('equal')
 
     fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
@@ -121,20 +123,20 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
-    c1 = axs[0].contourf(X, Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c1 = axs[0].contourf(Y, xmin, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True V RMS')
     axs[0].set_xticks([])
     axs[0].set_yticks([])
-    axs[0].set_xlim(0, 1.0)
-    axs[0].set_ylim(0, 1.0)
+    axs[0].set_xlim(xmin, xmax)
+    axs[0].set_ylim(ymin, ymax)
     axs[0].set_aspect('equal')
 
-    c2 = axs[1].contourf(X, Y, rms_pred_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c2 = axs[1].contourf(Y, X, rms_pred_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[1].set_title('Predicted V RMS')
     axs[1].set_xticks([])
     axs[1].set_yticks([])
-    axs[1].set_xlim(0, 1.0)
-    axs[1].set_ylim(0, 1.0)
+    axs[1].set_xlim(xmin, xmax)
+    axs[1].set_ylim(ymin, ymax)
     axs[1].set_aspect('equal')
 
     fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
