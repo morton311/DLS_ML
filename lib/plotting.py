@@ -431,10 +431,10 @@ def plot_points(runner):
     plt.contourf(X, Y, vort_mean, cmap='seismic', levels=1000, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
-    plt.text(point_1[0], point_1[1]+0.05, f'Point 1', 
-            color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
-    plt.text(point_2[0], point_2[1]+0.05, f'Point 2', 
-            color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
+    # plt.text(point_1[0], point_1[1]+0.05, f'Point 1', 
+    #         color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
+    # plt.text(point_2[0], point_2[1]+0.05, f'Point 2', 
+    #         color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
     # plt.xlabel('X')
     # plt.ylabel('Y')
     # plt.grid()
