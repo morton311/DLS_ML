@@ -62,8 +62,7 @@ del gemath_version
 
 #------------- Overall Function:  Documentation and Import -------------
 
-def curl_2d( x, y, Fx, Fy, missing=1e+20 \
-           , algorithm='default', R_sphere=6.37122e+6):
+def curl_2d( x, y, Fx, Fy, missing=1e+20, algorithm='default', R_sphere=6.37122e+6):
     """Curl of a vector F on a 2-D "rectangular" grid.
 
     The 2-D grid F is defined on is rectangular, meaning that while
