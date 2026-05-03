@@ -123,7 +123,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
-    c1 = axs[0].contourf(X,Ymin, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
+    c1 = axs[0].contourf(X,Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True V RMS')
     axs[0].set_xticks([])
     axs[0].set_yticks([])
