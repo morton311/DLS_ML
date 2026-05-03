@@ -888,18 +888,20 @@ def vis_modes(runner, config):
 
     shape_func_reshaped = np.zeros((patch_size, patch_size, num_modes+1), dtype=shape_funcs.dtype)
 
+    plot_modes = 10
+
     for i in range(num_modes+1):
         shape_func_reshaped[:nskip+1, nskip:, i] = shape_funcs[..., i]
         shape_func_reshaped[:nskip+1, :nskip+1, i] = shape_funcs[..., i+num_modes+1]
         shape_func_reshaped[ nskip:, :nskip+1, i] = shape_funcs[..., i+2*num_modes+2]
         shape_func_reshaped[ nskip:, nskip:, i] = shape_funcs[..., i+3*num_modes+3]
 
-    N, M = 2, 8
+    N, M = 2, 3 + plot_modes //2
     size = 0.8
     fig, axes = plt.subplots(N, M, sharey=True, sharex=True, figsize=(size*width, 2/7*size*width), gridspec_kw={'hspace': 0.05, 'wspace': 0.05}) #
 
     ax = axes.flatten()
-    for i in range(num_modes):
+    for i in range(plot_modes):
         j = i
         if i > 4:
             j += 3
@@ -937,7 +939,7 @@ def vis_modes(runner, config):
     plt.close()
 
     fig = plt.figure(figsize=(width, height))
-    num_to_plot = num_modes+1
+    num_to_plot = plot_modes+1
     for i in range(num_to_plot):
         j = i
         if i > 5:

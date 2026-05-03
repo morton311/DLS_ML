@@ -253,7 +253,7 @@ def plot_PSDs(runner, data_dict):
         fontsize=8  # Adjust font size
     )
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 1')
-    plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
+    # plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
     
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p1.png'), dpi=600)
     plt.close()
@@ -279,7 +279,7 @@ def plot_PSDs(runner, data_dict):
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 2')
-    plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
+    # plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
     
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p2.png'), dpi=600)
     plt.close()
@@ -498,7 +498,7 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
         fontsize=8  # Adjust font size
     )
     fig.suptitle('Velocity Data at Points of Interest')
-    fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
+    # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
 
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'point_data_comparison.png'), dpi=600)
     plt.close()
@@ -716,7 +716,7 @@ def coeff_PDF(runner, data_dict, eval_idx, true_idx):
         fontsize=8  # Adjust font size
     )
     fig.suptitle('Probability Density Function of Velocity at Points of Interest')
-    fig.tight_layout(rect=[0, 0, 1, 1.1])
+    # fig.tight_layout(rect=[0, 0, 1, 1.1])
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison.png'), dpi=600)
     plt.close()
 
@@ -758,7 +758,7 @@ def coeff_PDF_seaborn(runner, data_dict, eval_idx, true_idx):
         fontsize=8  # Adjust font size
     )
     fig.suptitle('Probability Density Function of Velocity at Points of Interest')
-    fig.tight_layout(rect=[0, 0, 1, 1.1])
+    # fig.tight_layout(rect=[0, 0, 1, 1.1])
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison_seaborn.png'), dpi=600)
     plt.close()
     
