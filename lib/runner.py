@@ -340,7 +340,8 @@ class runner(nn.Module):
                         nhead=self.config['params']['nhead'],
                         num_layers=self.config['params']['num_layers'],
                         embed=self.config['params'].get('embed', 'lin'),
-                        activation=self.config['params'].get('activation', 'relu')
+                        activation=self.config['params'].get('activation', 'relu'),
+                        pre_norm=self.config['params'].get('prenorm', False)
                         )
         elif self.config['model'] == 'lstm':
             self.model = models.LSTMModel(

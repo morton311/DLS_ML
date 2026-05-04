@@ -16,7 +16,8 @@
         "nhead":        4,
         "num_layers":   1,
         "embed":        "lin",
-        "activation":   "swiglu" 
+        "activation":   "swiglu",
+        "prenorm":       true
     },
 
     "train": {
