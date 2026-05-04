@@ -121,14 +121,14 @@ class TransformerEncoderModel(nn.Module):
             self.input_projection = nn.Linear(input_dim, d_model)
 
         if activation == 'relu':
-            self.activation = F.relu
+            activation = F.relu
         elif activation == 'SwiGLU':
-            self.activation = SwiGLU(d_model)
+            activation = SwiGLU(d_model)
 
         
         
         self.encoder_layers = nn.ModuleList([
-            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True, activation=self.activation, norm_first=pre_norm)
+            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True, activation=activation, norm_first=pre_norm)
             for _ in range(num_layers)
         ])
         self.fc = nn.Linear(d_model, input_dim)
