@@ -39,6 +39,10 @@
         "seen": {
             "init":     "train",
             "lim":      null
+        },
+        "short_val": {
+            "init":     "val",
+            "lim":      200
         }
     }
 }
