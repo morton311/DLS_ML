@@ -14,8 +14,8 @@ module use $HOME/my_modules
 module load torch_module
 source $HOME/.venv/bin/activate
 
-python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'train'
-python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'pred'
+#python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'train'
+#python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'pred'
 python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'eval'
 python3 main.py -c 'challenge/dls/p25m10/swiglu' -m 'latent'
 
