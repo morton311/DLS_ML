@@ -1035,9 +1035,9 @@ class runner(nn.Module):
 
                 print('Loaded predictions and truth')
 
-                # self.compute_TKE(pred_path)
-                # self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
-                # self.compute_vort(true_path, pred_path, batch_size=1000)
+                self.compute_TKE(pred_path)
+                self.compute_RMS(true_path, pred_path, eval_idx=eval_idx, batch_size=1000)
+                self.compute_vort(true_path, pred_path, batch_size=1000)
 
                 if self.config['mode'] == 'compare':
                     # Retrieve statistics from truth and predictions for saving as keys in self
@@ -1069,30 +1069,30 @@ class runner(nn.Module):
                 else:
                     # plot losses, RMS, TKE, Coherence
                     print(f'\nGenerating plots, saving')
-                    # if self.model is not None:
-                    #     plots.plot_loss(self)
-                    #     print('Loss plot done')
-                    # plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
-                    # print('RMS plot done\n')
-                    # plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                    # print('TKE plot done')
-                    # plots.plot_PSDs(self, point_dict)
-                    # print('PSD plot done')
-                    # plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                    # print('Coherence plot done')
+                    if self.model is not None:
+                        plots.plot_loss(self)
+                        print('Loss plot done')
+                    plots.plot_rms(self, pred_path=pred_path, eval_idx=eval_idx, true_idx=true_idx)
+                    print('RMS plot done\n')
+                    plots.plot_tke(self, true_path=true_path, pred_path=pred_path, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                    print('TKE plot done')
+                    plots.plot_PSDs(self, point_dict)
+                    print('PSD plot done')
+                    plots.plot_coherence(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Coherence plot done')
                     plots.plot_points(self)
                     print('Point plot done')
-                    # plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
-                    # print('Point data plot done')
-                    # if self.config['model'] == 'tr_enc':
-                    #     plots.attention_maps(self)
-                    #     print('Attention map plot done')
-                    # plots.plot_phase_portraits(self, point_dict)
-                    # plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
-                    # print('Spectrogram plot done')
-                    # plots.coeff_PDF(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                    # plots.coeff_PDF_seaborn(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
-                    # print('Coefficient PDF plot done\n\n')
+                    plots.plot_point_data(self, point_dict, idx=idx, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Point data plot done')
+                    if self.config['model'] == 'tr_enc':
+                        plots.attention_maps(self)
+                        print('Attention map plot done')
+                    plots.plot_phase_portraits(self, point_dict)
+                    plots.plot_spectrograms(self, point_dict, idx=idx, true_idx=true_idx)
+                    print('Spectrogram plot done')
+                    plots.coeff_PDF(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    plots.coeff_PDF_seaborn(self, point_dict, eval_idx=eval_idx, true_idx=true_idx)
+                    print('Coefficient PDF plot done\n\n')
 
                 
     def compute_TKE(self, pred_path, batch_size=1000):
