@@ -23,3 +23,8 @@ python3 main.py -c 'challenge/underfit_dls_p25m20' -m 'train'
 python3 main.py -c 'challenge/underfit_dls_p25m20' -m 'pred'
 python3 main.py -c 'challenge/underfit_dls_p25m20' -m 'eval'
 python3 main.py -c 'challenge/underfit_dls_p25m20' -m 'latent'
+
+python3 main.py -c 'challenge/dls_p11m10' -m 'train'
+python3 main.py -c 'challenge/dls_p11m10' -m 'pred'
+python3 main.py -c 'challenge/dls_p11m10' -m 'eval'
+python3 main.py -c 'challenge/dls_p11m10' -m 'latent'
