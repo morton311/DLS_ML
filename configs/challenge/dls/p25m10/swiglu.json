@@ -13,6 +13,7 @@
     "params": {
         "time_lag":     70,
         "d_model":      128,
+        "ff_dim":       512,
         "nhead":        4,
         "num_layers":   1,
         "embed":        "lin",
