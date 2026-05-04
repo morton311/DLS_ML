@@ -170,9 +170,11 @@ class TransformerEncoderModel(nn.Module):
         return self.encoder_attn_outputs.copy()
 
     def forward(self, x):
+        print('Input shape before projection: ', x.shape)
         x = self.input_projection(x)
+        print('Input shape after projection: ', x.shape)
         x = self.positional_encoding(x)
-
+        print('Input shape after embedding: ', x.shape)
         for layer in self.encoder_layers:
             x = layer(x)
             
