@@ -4,6 +4,7 @@
 #SBATCH --account=NAWCP24632466
 #SBATCH --qos=standard
 #SBATCH --constraint=mla
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH -t 02:00:00
@@ -13,7 +14,12 @@ module use $HOME/my_modules
 module load torch_module
 source $HOME/.venv/bin/activate
 
-#python3 main.py -c 'challenge/dls_tr_ta1_2_1' -m 'train'
-#python3 main.py -c 'challenge/dls_tr_ta1_2_1' -m 'pred'
-python3 main.py -c 'challenge/dls_tr_ta1_2_1' -m 'eval'
-python3 main.py -c 'challenge/dls_tr_ta1_2_1' -m 'latent'
+python3 main.py -c 'challenge/small_dls_p25m10' -m 'train'
+python3 main.py -c 'challenge/small_dls_p25m10' -m 'pred'
+python3 main.py -c 'challenge/small_dls_p25m10' -m 'eval'
+python3 main.py -c 'challenge/small_dls_p25m10' -m 'latent'
+
+python3 main.py -c 'challenge/small_dls_p25m20' -m 'train'
+python3 main.py -c 'challenge/small_dls_p25m20' -m 'pred'
+python3 main.py -c 'challenge/small_dls_p25m20' -m 'eval'
+python3 main.py -c 'challenge/small_dls_p25m20' -m 'latent'

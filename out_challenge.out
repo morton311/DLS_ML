@@ -31,4 +31,4 @@ Loading torch_module
   Unloading conflict: amd/aocc/4.1.0 amd/aocl/aocc/4.1.0
     penguin/openmpi/4.1.6/aocc-4.0.0
   Loading requirement: cse/openmpi/latest cseinit cse/python3/latest
-    cse/git/latest cuda/cuda-11.8
+    cse/git/latest cuda/cuda-11.8 tex/2023

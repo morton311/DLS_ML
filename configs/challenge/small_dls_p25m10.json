@@ -24,10 +24,10 @@
         "sample_train": 0,
         "sample_test":  0,
         "lr":           0.001,
-        "num_epochs":   200,
+        "num_epochs":   1000,
         "patience":     200,
         "train_ahead":  1,
-        "batch_size":   128,
+        "batch_size":   512,
         "gamma":        1
     },
 
