@@ -107,7 +107,7 @@ class SwiGLU(nn.Module):
         swiglu = swish * self.linear_2(x)
 
         return swiglu
-
+    
 ## ====================================== Transformer ============================================
 # Define the Transformer Encoder model
 class TransformerEncoderModel(nn.Module):
@@ -120,17 +120,24 @@ class TransformerEncoderModel(nn.Module):
             self.positional_encoding = PositionalEncoding(d_model, max_len=time_lag)
             self.input_projection = nn.Linear(input_dim, d_model)
 
-        if activation == 'relu':
-            activation = F.relu
-        elif activation == 'SwiGLU':
-            activation = SwiGLU(d_model)
+        if isinstance(activation, str):
+            activation = activation.lower()
+            if activation not in {'relu', 'gelu', 'swiglu'}:
+                raise RuntimeError(f"activation should be relu/gelu/swiglu, not {activation}")
 
-        
-        
-        self.encoder_layers = nn.ModuleList([
-            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True, activation=activation, norm_first=pre_norm)
-            for _ in range(num_layers)
-        ])
+        self.encoder_layers = nn.ModuleList([])
+        for _ in range(num_layers):
+            base_activation = 'relu' if activation == 'swiglu' else activation
+            layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=nhead,
+                batch_first=True,
+                activation=base_activation,
+                norm_first=pre_norm,
+            )
+            if activation == 'swiglu':
+                layer.activation = SwiGLU(d_model)
+            self.encoder_layers.append(layer)
         self.fc = nn.Linear(d_model, input_dim)
 
         # Attention outputs storage
