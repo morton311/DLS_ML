@@ -111,7 +111,7 @@ class SwiGLU(nn.Module):
 ## ====================================== Transformer ============================================
 # Define the Transformer Encoder model
 class TransformerEncoderModel(nn.Module):
-    def __init__(self, time_lag, input_dim, d_model=256, nhead=4, num_layers=4, embed='lin', activation='relu', pre_norm=False):
+    def __init__(self, time_lag, input_dim, d_model=256, ff_dim=2048, nhead=4, num_layers=4, embed='lin', activation='relu', pre_norm=False):
         super(TransformerEncoderModel, self).__init__()
         if embed == 'TS':
             self.positional_encoding = nn.Identity()
@@ -130,13 +130,14 @@ class TransformerEncoderModel(nn.Module):
             base_activation = 'relu' if activation == 'swiglu' else activation
             layer = nn.TransformerEncoderLayer(
                 d_model=d_model,
+                dim_feedforward=ff_dim,
                 nhead=nhead,
                 batch_first=True,
                 activation=base_activation,
                 norm_first=pre_norm,
             )
             if activation == 'swiglu':
-                layer.activation = SwiGLU(d_model)
+                layer.activation = SwiGLU(ff_dim)
             self.encoder_layers.append(layer)
         self.fc = nn.Linear(d_model, input_dim)
 

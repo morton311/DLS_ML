@@ -337,6 +337,7 @@ class runner(nn.Module):
                         time_lag=self.config['params']['time_lag'],
                         input_dim=self.config['params']['input_dim'],
                         d_model=self.config['params']['d_model'],
+                        ff_dim=self.config['params']['ff_dim'].get('ff_dim', 4 * self.config['params']['d_model']),
                         nhead=self.config['params']['nhead'],
                         num_layers=self.config['params']['num_layers'],
                         embed=self.config['params'].get('embed', 'lin'),
