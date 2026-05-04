@@ -15,7 +15,8 @@
         "d_model":      128,
         "nhead":        4,
         "num_layers":   1,
-        "embed":        "lin"
+        "embed":        "lin",
+        "activation":   "swiglu" 
     },
 
     "train": {
@@ -26,7 +27,7 @@
         "lr":           0.001,
         "num_epochs":   1000,
         "patience":     200,
-        "train_ahead":  1,
+        "train_ahead":  5,
         "batch_size":   512,
         "gamma":        1
     },

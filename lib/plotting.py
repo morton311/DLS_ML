@@ -51,7 +51,7 @@ def plot_loss(runner):
     plt.ylabel('Loss')
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     # plt.tight_layout()
-    plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=600)
+    plt.savefig(runner.paths_bib.fig_dir + 'losses.png', dpi=300)
     plt.close()
 
 def plot_rms(runner, pred_path, eval_idx, true_idx):
@@ -117,7 +117,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
 
     fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
 
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=300)
     plt.close()
 
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
@@ -139,7 +139,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
 
     fig.colorbar(c1, ax=axs, shrink=0.8, ticks=ticks, format='%.2f', pad=0.03)
 
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_v_comparison.png') , dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_v_comparison.png') , dpi=300)
     plt.close()
 
     
@@ -183,7 +183,7 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     # plt.tight_layout()
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_comparison.png'), dpi=300)
     plt.close()
 
     
@@ -207,7 +207,7 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     )
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     # plt.tight_layout() #rect=[0, 0, 1, 0.95]
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_psd_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'tke_psd_comparison.png'), dpi=300)
     plt.close()
 
     
@@ -255,7 +255,7 @@ def plot_PSDs(runner, data_dict):
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 1')
     # plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
     
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p1.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p1.png'), dpi=300)
     plt.close()
 
     # Plotting the PSD for U and V component point 2
@@ -281,7 +281,7 @@ def plot_PSDs(runner, data_dict):
     fig.suptitle('Power Spectral Density of $u$ and $v$ at Point 2')
     # plt.tight_layout(rect=[0, 0, 1, 1.15])  # Reduce top margin for suptitle
     
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p2.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'psd_comparison_p2.png'), dpi=300)
     plt.close()
 
 def plot_autocorr(runner, data_dict):
@@ -326,7 +326,7 @@ def plot_autocorr(runner, data_dict):
     axs[0,0].set_ylabel('Autocorrelation')
     axs[1,0].set_ylabel('Autocorrelation')
     # fig.tight_layout()
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'autocorr_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'autocorr_comparison.png'), dpi=300)
     plt.close()
 
 
@@ -362,7 +362,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
     
     # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p1.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p1.png'), dpi=300)
     plt.close()
 
     # Compute Coherence for U and V component point 2
@@ -388,7 +388,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     axs[1].grid(visible=True, linestyle='--', linewidth=0.5)
 
     # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Reduce top margin for suptitle
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p2.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coherence_comparison_p2.png'), dpi=300)
     plt.close()
 
 def plot_points(runner):
@@ -421,14 +421,16 @@ def plot_points(runner):
     # Load the mean flow data
     with h5py.File(runner.paths_bib.data_path, 'r') as f:
         mean_flow = f['mean'][:]
+        snapshot = f['UV'][0, ..., 0]  # Load the first snapshot for reference
 
     vort_mean = curl_2d(x, y, mean_flow[..., 0], mean_flow[..., 1])
 
-    vmax = np.max(np.abs(vort_mean))
+    snapshot = snapshot - mean_flow[..., 0]  # Subtract mean flow to get fluctuations
+    vmax = np.max(np.abs(snapshot))
 
     # Create a plot that shows the points in the domain
-    plt.figure()
-    plt.contourf(X, Y, vort_mean, cmap='seismic', levels=1000, vmin=-vmax, vmax=vmax)
+    plt.figure(figsize=(5,2))
+    plt.contourf(X, Y, snapshot, cmap='seismic', levels=200, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
     # plt.text(point_1[0], point_1[1]+0.05, f'Point 1', 
@@ -438,8 +440,8 @@ def plot_points(runner):
     # plt.xlabel('X')
     # plt.ylabel('Y')
     # plt.grid()
-    plt.axis('equal')
     # plt.axis('off')
+    plt.axis('equal')
     plt.xticks([])
     plt.yticks([])
 
@@ -447,7 +449,7 @@ def plot_points(runner):
     # plt.ylim(min(y), max(y))
     # plt.tight_layout()
 
-    plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=600)
+    plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=300)
     plt.close()
 
 def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
@@ -511,7 +513,7 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     fig.suptitle('Velocity Data at Points of Interest')
     # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
 
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'point_data_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'point_data_comparison.png'), dpi=300)
     plt.close()
 
     # calculate L2 error for each point
@@ -579,7 +581,7 @@ def plot_spectrograms(runner, data_dict, idx, true_idx):
         for ax in axs[-1, :]:
             ax.set_xlabel('Nondimensional time')
         # plt.tight_layout()
-        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'spectrogram_{point}.png'), dpi=600)
+        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'spectrogram_{point}.png'), dpi=300)
         plt.close()
 
 def plot_phase_portraits(runner, data_dict):
@@ -619,7 +621,7 @@ def plot_phase_portraits(runner, data_dict):
         )
         plt.grid(visible=True, linestyle='--', linewidth=0.5)
         # plt.tight_layout()
-        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'phase_portrait_{point}.png'), dpi=600)
+        plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'phase_portrait_{point}.png'), dpi=300)
         plt.close()
 
 
@@ -678,7 +680,7 @@ def attention_maps(runner):
                     
 
         # plt.tight_layout()
-        plt.savefig(runner.paths_bib.fig_dir + 'attention_weights.png', dpi=600)
+        plt.savefig(runner.paths_bib.fig_dir + 'attention_weights.png', dpi=300)
         plt.close()
 
 
@@ -728,7 +730,7 @@ def coeff_PDF(runner, data_dict, eval_idx, true_idx):
     )
     fig.suptitle('Probability Density Function of Velocity at Points of Interest')
     # fig.tight_layout(rect=[0, 0, 1, 1.1])
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison.png'), dpi=300)
     plt.close()
 
 def coeff_PDF_seaborn(runner, data_dict, eval_idx, true_idx):
@@ -770,7 +772,7 @@ def coeff_PDF_seaborn(runner, data_dict, eval_idx, true_idx):
     )
     fig.suptitle('Probability Density Function of Velocity at Points of Interest')
     # fig.tight_layout(rect=[0, 0, 1, 1.1])
-    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison_seaborn.png'), dpi=600)
+    plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'coeff_pdf_comparison_seaborn.png'), dpi=300)
     plt.close()
     
 

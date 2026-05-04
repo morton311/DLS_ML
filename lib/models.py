@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 from functools import partial
 from datetime import datetime
@@ -91,10 +92,26 @@ class TimeSpaceEmbedding(nn.Module):
         out     = self.act(self.time_compress(tau))
         return out
 
+######################################
+# SwiGLU Activation Function for FFN #
+######################################
+class SwiGLU(nn.Module):
+    def __init__(self, dimension):
+        super().__init__()
+        self.linear_1 = nn.Linear(dimension,dimension)
+        self.linear_2 = nn.Linear(dimension,dimension)
+
+    def forward(self, x):
+        output = self.linear_1(x)
+        swish = output * torch.sigmoid(output)
+        swiglu = swish * self.linear_2(x)
+
+        return swiglu
+
 ## ====================================== Transformer ============================================
 # Define the Transformer Encoder model
 class TransformerEncoderModel(nn.Module):
-    def __init__(self, time_lag, input_dim, d_model=256, nhead=4, num_layers=4, embed='lin'):
+    def __init__(self, time_lag, input_dim, d_model=256, nhead=4, num_layers=4, embed='lin', activation='relu'):
         super(TransformerEncoderModel, self).__init__()
         if embed == 'TS':
             self.positional_encoding = nn.Identity()
@@ -102,9 +119,16 @@ class TransformerEncoderModel(nn.Module):
         elif embed == 'lin':
             self.positional_encoding = PositionalEncoding(d_model, max_len=time_lag)
             self.input_projection = nn.Linear(input_dim, d_model)
+
+        if activation == 'relu':
+            self.activation = F.relu
+        elif activation == 'SwiGLU':
+            self.activation = SwiGLU(d_model)
+
+        
         
         self.encoder_layers = nn.ModuleList([
-            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True)
+            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True, activation=self.activation)
             for _ in range(num_layers)
         ])
         self.fc = nn.Linear(d_model, input_dim)

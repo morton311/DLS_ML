@@ -15,7 +15,8 @@
         "d_model":      128,
         "nhead":        4,
         "num_layers":   1,
-        "embed":        "lin"
+        "embed":        "lin",
+        "activation":   "relu" 
     },
 
     "train": {
@@ -24,10 +25,11 @@
         "sample_train": 0,
         "sample_test":  0,
         "lr":           0.001,
-        "num_epochs":   200,
+        "num_epochs":   1000,
         "patience":     200,
-        "train_ahead":  5,
-        "batch_size":   128
+        "train_ahead":  1,
+        "batch_size":   512,
+        "gamma":        1
     },
 
     "predictions": {
@@ -38,6 +40,10 @@
         "seen": {
             "init":     "train",
             "lim":      null
+        },
+        "short_val": {
+            "init":     "val",
+            "lim":      200
         }
     }
 }
