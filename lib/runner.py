@@ -242,7 +242,7 @@ class runner(nn.Module):
             else:
                 print(f"Latent model already exists at {self.paths_bib.latent_model_path}. Loading model.")
                 
-                bvae.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True))
+                bvae.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True, map_location=self.device))
                 bvae.to(self.device)
 
 
@@ -357,7 +357,7 @@ class runner(nn.Module):
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
-            self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True))
+            self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True, map_location=self.device))
         if self.model is not None:
             print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
@@ -403,7 +403,7 @@ class runner(nn.Module):
             model_flag = os.path.exists(self.paths_bib.model_path)
             if check_flag and not model_flag and not self.config['overwrite'] in ['l', 'm']: 
                 print(f"Loading checkpoint from {self.paths_bib.checkpoint_path}")
-                checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True)
+                checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True, map_location=self.device)
                 checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
                 # strip 'module.' from state dict keys if present (from DDP)
                 checkpoint['model_state_dict'] = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in checkpoint['model_state_dict'].items()}
@@ -424,7 +424,7 @@ class runner(nn.Module):
             elif model_flag and not self.config['overwrite'] in ['l', 'm']:
                 print(f"Model already exists at {self.paths_bib.model_path}. Skipping training.")
                 print(f"Loading model weights from {self.paths_bib.model_path}")
-                state_dict = torch.load(self.paths_bib.model_path, weights_only=True)
+                state_dict = torch.load(self.paths_bib.model_path, weights_only=True, map_location=self.device)
                 state_dict = remap_embed_keys(state_dict)
                 self.model.load_state_dict(state_dict)
                 self.checkpointed = False
@@ -912,7 +912,7 @@ class runner(nn.Module):
 
                     data_shape = [latent_config.num_vars, latent_config.nx_t, latent_config.ny_t]
                     bvae_model = models.bvae_model(data_shape, self.config)
-                    bvae_model.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True))
+                    bvae_model.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True, map_location=self.device))
                     bvae_model.to(self.device)
 
                     models.bvae_batch_decode(
