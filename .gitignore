@@ -13,6 +13,7 @@ __pycache__/
 
 # Exclude logs
 *.log
+*.out
 
 # Exclude temporary files
 *.tmp
@@ -24,3 +25,4 @@ __pycache__/
 .env
 *.env
 .ldc_venv/
+
