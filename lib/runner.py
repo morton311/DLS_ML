@@ -434,6 +434,8 @@ class runner(nn.Module):
                 print(f"Loading model weights from {self.paths_bib.model_path}")
                 state_dict = torch.load(self.paths_bib.model_path, weights_only=True, map_location=self.device)
                 state_dict = remap_embed_keys(state_dict)
+                if not self.config['distributed']:
+                    state_dict = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in state_dict.items()}
                 self.model.load_state_dict(state_dict)
                 self.checkpointed = False
             else:
