@@ -4,16 +4,16 @@
     "latent_type":      "dls",
 
     "latent_params": {
-        "patch_size":   11,
+        "patch_size":   15,
         "num_modes":    10
     },
 
     "model":            "tr_enc",
 
     "params": {
-        "time_lag":     70,
-        "d_model":      512,
-        "ff_dim":       1536,
+        "time_lag":     65,
+        "d_model":      256,
+        "ff_dim":       768,
         "nhead":        4,
         "num_layers":   4,
         "embed":        "lin",

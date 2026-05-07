@@ -360,7 +360,10 @@ class runner(nn.Module):
         
         # Load the model weights if they exist and overwrite is not set to 'l' or 'm'
         if os.path.exists(self.paths_bib.model_path) and not self.config['overwrite'] in ['l', 'm']:
-            self.model.load_state_dict(torch.load(self.paths_bib.model_path, weights_only=True, map_location=self.device))
+            weights = torch.load(self.paths_bib.model_path, weights_only=True, map_location=self.device)
+            if not self.config['distributed']:
+                weights = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in weights.items()}
+            self.model.load_state_dict(weights)
         if self.model is not None:
             print(f"Model initialized with {sum(p.numel() for p in self.model.parameters())} parameters")
 
@@ -409,9 +412,11 @@ class runner(nn.Module):
                 checkpoint = torch.load(self.paths_bib.checkpoint_path, weights_only=True, map_location=self.device)
                 checkpoint['model_state_dict'] = remap_embed_keys(checkpoint['model_state_dict'])
                 # strip 'module.' from state dict keys if present (from DDP)
-                checkpoint['model_state_dict'] = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in checkpoint['model_state_dict'].items()}
+                if not self.config['distributed']:
+                    checkpoint['model_state_dict'] = {k.replace('module.', '', 1) if k.startswith('module.') else k: v for k, v in checkpoint['model_state_dict'].items()}
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
                 if 'lr_scheduler_state_dict' in checkpoint:
                     self.scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
                 else: 
@@ -664,6 +669,7 @@ class runner(nn.Module):
                             'epoch': epoch,
                             'model_state_dict': self.model.state_dict(),
                             'optimizer_state_dict': self.optimizer.state_dict(),
+                            'scheduler_state_dict': self.scheduler.state_dict(),
                             'losses': losses,
                             'test_losses': test_losses,
                             'early_stop_counter': early_stop_counter,
