@@ -44,7 +44,12 @@ source $HOME/.venv/bin/activate
 # python3 main.py -c 'challenge/dls/p11m10/case' -m 'eval'
 # python3 main.py -c 'challenge/dls/p11m10/case' -m 'latent'
 
-python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'train'
-python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'pred'
-python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'eval'
-python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'latent'
+# python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'train'
+# python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'pred'
+# python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'eval'
+# python3 main.py -c 'challenge/dls/p11m10/deep_swiglu' -m 'latent' 
+
+python3 main.py -c 'challenge/dls/p15m10/swiglu2' -m 'train'
+python3 main.py -c 'challenge/dls/p15m10/swiglu2' -m 'pred'
+python3 main.py -c 'challenge/dls/p15m10/swiglu2' -m 'eval'
+python3 main.py -c 'challenge/dls/p15m10/swiglu2' -m 'latent'
