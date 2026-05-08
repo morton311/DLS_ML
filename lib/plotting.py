@@ -95,8 +95,13 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     size = 0.75
 
     ticks = np.linspace(0, 1, 6)
+    domain_aspect_ratio = np.abs((y[-1, 0] - y[0, 0]) / (x[-1, 0] - x[0, 0]))
+    print(f"Domain aspect ratio: {domain_aspect_ratio}")
+
+    fig_width, fig_height = size * width, size * width * domain_aspect_ratio
+    print(f"fig width: {fig_width}, fig height: {fig_height}")
     
-    fig, axs = plt.subplots(1, 2, figsize=(size*width,size*width/2))
+    fig, axs = plt.subplots(1, 2, figsize=(fig_width, fig_height))
     c1 = axs[0].contourf(X,Y, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True U RMS')
     axs[0].set_xticks([])
@@ -120,7 +125,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/2))
+    fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width*domain_aspect_ratio/2))
     c1 = axs[0].contourf(X,Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True V RMS')
     axs[0].set_xticks([])
@@ -164,11 +169,13 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     print(f"TKE error: {100*tke_error:.3f}%")
     t = idx / 100
     t_true = np.array(true_idx) / 100
+    t_cut = t_true[time_lag-1]
 
     size = 0.6
     plt.figure(figsize=(size*width,size*height))
     plt.plot(t_true, tke_true[true_idx], label='True TKE', color='k', linestyle='-')
-    plt.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='-.')
+    plt.plot(t[time_lag-1:], tke_pred[time_lag-1:], label='Predicted TKE', color='r', linestyle='-.')
+    # plt.scatter(t_cut, tke_pred[time_lag-1], color='r', marker='x', s=35, label='Prediction Start',joinstyle='round')  # Mark the point where prediction starts
     plt.xlabel('Nondimensional time')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
     plt.title('Comparison of True and Predicted TKE', pad=16)
@@ -180,6 +187,8 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
         frameon=False,  # Removes legend border,
         fontsize=8  # Adjust font size
     )
+    # plot vertical line at t_cut
+    # plt.axvline(x=t_cut, color='k', linestyle='--', linewidth=0.5, alpha=0.7)
     plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
     plt.grid(visible=True, linestyle='--', linewidth=0.5)
     # plt.tight_layout()

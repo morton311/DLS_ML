@@ -46,6 +46,10 @@
         "short_val": {
             "init":     "val",
             "lim":      200
+        },
+        "ch_val" : {
+            "init":     "val",
+            "lim":      30
         }
     }
 }
