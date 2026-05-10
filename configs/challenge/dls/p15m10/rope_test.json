@@ -1,7 +1,5 @@
 {
     "data_name":        "Challenge2_1_train",
-    
-    "frequency":        16000,
 
     "latent_type":      "dls",
 
@@ -18,7 +16,7 @@
         "ff_dim":       768,
         "nhead":        4,
         "num_layers":   4,
-        "embed":        "lin",
+        "embed":        "rope",
         "activation":   "swiglu",
         "prenorm":       true
     },

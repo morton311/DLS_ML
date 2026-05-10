@@ -93,14 +93,11 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     rms_pred_plot = rms_pred / RMS_max
     
     size = 0.75
-
-    ticks = np.linspace(0, 1, 6)
     domain_aspect_ratio = np.abs((y[-1, 0] - y[0, 0]) / (x[-1, 0] - x[0, 0]))
-    print(f"Domain aspect ratio: {domain_aspect_ratio}")
 
     fig_width, fig_height = size * width, size * width * domain_aspect_ratio
-    print(f"fig width: {fig_width}, fig height: {fig_height}")
-    
+
+    ticks = np.linspace(0, 1, 6)
     fig, axs = plt.subplots(1, 2, figsize=(fig_width, fig_height))
     c1 = axs[0].contourf(X,Y, rms_true_plot[0], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True U RMS')
@@ -125,7 +122,7 @@ def plot_rms(runner, pred_path, eval_idx, true_idx):
     plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, 'rms_u_comparison.png'), dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width*domain_aspect_ratio/2))
+    fig, axs = plt.subplots(1, 2, figsize=(fig_width, fig_height))
     c1 = axs[0].contourf(X,Y, rms_true_plot[1], levels=200, cmap='RdBu_r', vmin=0, vmax=1)
     axs[0].set_title('True V RMS')
     axs[0].set_xticks([])
@@ -167,8 +164,10 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     tke_error = l2_err_norm(true=tke_true[eval_idx[time_lag:]], pred=tke_pred[time_lag:len(eval_idx)])
 
     print(f"TKE error: {100*tke_error:.3f}%")
-    t = idx / 100
-    t_true = np.array(true_idx) / 100
+    frequency = runner.config.get('frequency', 100)
+    print(f"Frequency: {frequency} Hz")
+    t = idx / frequency
+    t_true = np.array(true_idx) / frequency
     t_cut = t_true[time_lag-1]
 
     size = 0.6
@@ -176,7 +175,10 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     plt.plot(t_true, tke_true[true_idx], label='True TKE', color='k', linestyle='-')
     plt.plot(t[time_lag-1:], tke_pred[time_lag-1:], label='Predicted TKE', color='r', linestyle='-.')
     # plt.scatter(t_cut, tke_pred[time_lag-1], color='r', marker='x', s=35, label='Prediction Start',joinstyle='round')  # Mark the point where prediction starts
-    plt.xlabel('Nondimensional time')
+    if 'ldc' in runner.config['data_name']:
+        plt.xlabel('Nondimensional time')
+    elif 'Challenge' in runner.config['data_name']:
+        plt.xlabel('Time (s)')
     plt.ylabel(r'$\mathrm{TKE} = \frac{1}{2} \sum \mathbf{u}^2$')
     plt.title('Comparison of True and Predicted TKE', pad=16)
     plt.legend(
@@ -198,8 +200,8 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
     
 
     # psd of TKE
-    f, Pxx_true = welch(tke_true[eval_idx[time_lag:]], fs=100)
-    f, Pxx_pred = welch(tke_pred[time_lag:], fs=100)
+    f, Pxx_true = welch(tke_true[eval_idx[time_lag:]], fs=frequency)
+    f, Pxx_pred = welch(tke_pred[time_lag:], fs=frequency)
     plt.figure(figsize=(size*width,size*height))
     plt.loglog(f, Pxx_true, label='True TKE', color='k', linestyle='-')
     plt.loglog(f, Pxx_pred, label='Predicted TKE', color='r', linestyle='-.')
@@ -225,14 +227,15 @@ def plot_tke(runner, true_path, pred_path, idx, eval_idx, true_idx):
 def plot_PSDs(runner, data_dict):
     psd_results = {}
     time_lag = runner.config['params']['time_lag']
+    frequency = runner.config.get('frequency', 100)
     # Loop through data types (ground truth and prediction) and points
     for data_type, points in data_dict.items():
         psd_results[data_type] = {}
         for point_name, data in points.items():
             psd_results[data_type][point_name] = {}
             # Compute PSD for the u-component
-            f_u, Pxx_u = psd(data[time_lag:, 0])
-            f_v, Pxx_v = psd(data[time_lag:, 1])
+            f_u, Pxx_u = psd(data[time_lag:, 0], fs=frequency)
+            f_v, Pxx_v = psd(data[time_lag:, 1], fs=frequency)
             # Combine u and v components into a single array
             Pxx = np.array([Pxx_u, Pxx_v])
             psd_results[data_type][point_name] = Pxx
@@ -247,8 +250,12 @@ def plot_PSDs(runner, data_dict):
     axs[1].loglog(psd_results['f'], psd_results['pred']['p1'][1], label='Predicted $v$', color='r', linestyle='-.')
     axs[0].set_ylabel('PSD($u_{p1}$)')
     axs[1].set_ylabel('PSD($v_{p1}$)')
-    axs[0].set_xlabel('Nondimensional frequency')
-    axs[1].set_xlabel('Nondimensional frequency')
+    if 'ldc' in runner.config['data_name']:
+        axs[0].set_xlabel('Nondimensional frequency')
+        axs[1].set_xlabel('Nondimensional frequency')
+    elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_xlabel('Frequency (Hz)')
+        axs[1].set_xlabel('Frequency (Hz)')
     # axs[0].legend()
     # axs[1].legend()
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
@@ -275,8 +282,12 @@ def plot_PSDs(runner, data_dict):
     axs[1].loglog(psd_results['f'], psd_results['pred']['p2'][1], label='Predicted $v$', color='r', linestyle='-.')
     axs[0].set_ylabel('PSD($u_{p2}$)')
     axs[1].set_ylabel('PSD($v_{p2}$)')
-    axs[0].set_xlabel('Nondimensional frequency')
-    axs[1].set_xlabel('Nondimensional frequency')
+    if 'ldc' in runner.config['data_name']:
+        axs[0].set_xlabel('Nondimensional frequency')
+        axs[1].set_xlabel('Nondimensional frequency')
+    elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_xlabel('Frequency (Hz)')
+        axs[1].set_xlabel('Frequency (Hz)')
     axs[1].legend(
         ['True', 'Predicted'],
         loc='lower right',
@@ -298,6 +309,7 @@ def plot_autocorr(runner, data_dict):
     Plot the autocorrelation of the data. Not yet implemented
     """
     size = 1
+    frequency = runner.config.get('frequency', 100)
     
     fig, axs = plt.subplots(2, 2, figsize=(10, 5))
     lags, corr_true_u1 = corr(data_dict['truth']['p1'][:,0], data_dict['truth']['p1'][:,0])
@@ -313,7 +325,7 @@ def plot_autocorr(runner, data_dict):
     lags, corr_pred_v2 = corr(data_dict['pred']['p2'][:,1], data_dict['pred']['p2'][:,1])
 
     # Plotting the autocorrelation for U and V component point 1
-    lags = lags / 100  # Convert to nondimensional time
+    lags = lags / frequency
 
     axs[0,0].plot(lags, corr_true_u1, label='True', color='k', linestyle='-')
     axs[0,0].plot(lags, corr_pred_u1, label='Predicted', color='r', linestyle='-.')
@@ -346,6 +358,7 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     """
     time_lag = runner.config['params']['time_lag']
     size = 1
+    frequency = runner.config.get('frequency', 100)
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     if len(eval_idx) == len(true_idx):
         eval_idx = range(len(true_idx))
@@ -353,8 +366,8 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     truth = data_dict['truth']['p1'][eval_idx[time_lag:], :]
     pred = data_dict['pred']['p1'][time_lag:len(eval_idx), :]
 
-    f_u, Cxy_u = coher(truth[:,0], pred[:,0])
-    f_v, Cxy_v = coher(truth[:,1], pred[:,1])
+    f_u, Cxy_u = coher(truth[:,0], pred[:,0], fs=frequency)
+    f_v, Cxy_v = coher(truth[:,1], pred[:,1], fs=frequency)
 
     # Plotting the Coherence for U and V component point 1
     axs[0].semilogx(f_u, Cxy_u, label='Coherence', color='k', linestyle='-')
@@ -362,8 +375,12 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
 
     axs[0].set_ylabel('MSC($u_{p1}$)')
     axs[1].set_ylabel('MSC($v_{p1}$)')
-    axs[0].set_xlabel('Nondimensional frequency')
-    axs[1].set_xlabel('Nondimensional frequency')
+    if 'ldc' in runner.config['data_name']:
+        axs[0].set_xlabel('Nondimensional frequency')
+        axs[1].set_xlabel('Nondimensional frequency')
+    elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_xlabel('Frequency (Hz)')
+        axs[1].set_xlabel('Frequency (Hz)')
     axs[0].set_ylim([0,1])
     axs[1].set_ylim([0,1])
     fig.suptitle('Magnitude Squared Coherence Between Truth and Prediction at Point 1')
@@ -380,16 +397,20 @@ def plot_coherence(runner, data_dict, eval_idx, true_idx):
     pred = data_dict['pred']['p2'][time_lag:len(eval_idx), :]
 
 
-    f_u, Cxy_u = coher(truth[:,0], pred[:,0])
-    f_v, Cxy_v = coher(truth[:,1], pred[:,1])
+    f_u, Cxy_u = coher(truth[:,0], pred[:,0], fs=frequency)
+    f_v, Cxy_v = coher(truth[:,1], pred[:,1], fs=frequency)
     # Plotting the Coherence for U and V component point 2
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     axs[0].semilogx(f_u, Cxy_u, label='Coherence', color='k', linestyle='-')
     axs[1].semilogx(f_v, Cxy_v, label='Coherence', color='k', linestyle='-')
     axs[0].set_ylabel('MSC($u_{p2}$)')
     axs[1].set_ylabel('MSC($v_{p2}$)')
-    axs[0].set_xlabel('Nondimensional frequency')
-    axs[1].set_xlabel('Nondimensional frequency')
+    if 'ldc' in runner.config['data_name']:
+        axs[0].set_xlabel('Nondimensional frequency')
+        axs[1].set_xlabel('Nondimensional frequency')
+    elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_xlabel('Frequency (Hz)')
+        axs[1].set_xlabel('Frequency (Hz)')
     axs[0].set_ylim([0,1])
     axs[1].set_ylim([0,1])
     fig.suptitle('Magnitude Squared Coherence Between Truth and Prediction at Point 2')
@@ -437,25 +458,33 @@ def plot_points(runner):
     snapshot = snapshot - mean_flow[..., 0]  # Subtract mean flow to get fluctuations
     vmax = np.max(np.abs(snapshot))
 
+
     # Create a plot that shows the points in the domain
-    plt.figure(figsize=(5,2))
-    plt.contourf(X, Y, snapshot, cmap='seismic', levels=200, vmin=-vmax, vmax=vmax)
+    size = 1
+    domain_height = np.abs(y[-1, 0] - y[0, 0])
+    domain_width = np.abs(x[-1, 0] - x[0, 0])
+    domain_aspect_ratio = domain_height / domain_width
+    
+
+    fig_width, fig_height = size * width, size * width * domain_aspect_ratio
+    plt.figure(figsize=(fig_width, fig_height))
+    plt.contourf(X, Y, snapshot, cmap='RdBu_r', levels=200, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
-    # plt.text(point_1[0], point_1[1]+0.05, f'Point 1', 
-    #         color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
-    # plt.text(point_2[0], point_2[1]+0.05, f'Point 2', 
-    #         color='k', fontsize=12, va='bottom', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
+    plt.text(point_1[0], point_1[1]-0.1*domain_height, f'Point 1', 
+            color='k', fontsize=12, va='top', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
+    plt.text(point_2[0], point_2[1]-0.1*domain_height, f'Point 2', 
+            color='k', fontsize=12, va='top', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
     # plt.xlabel('X')
     # plt.ylabel('Y')
     # plt.grid()
     # plt.axis('off')
-    plt.axis('equal')
+    # plt.axis('equal')
     plt.xticks([])
     plt.yticks([])
 
-    # plt.xlim(min(x), max(x))
-    # plt.ylim(min(y), max(y))
+    plt.xlim(min(x), max(x))
+    plt.ylim(min(y), max(y))
     # plt.tight_layout()
 
     plt.savefig(runner.paths_bib.fig_dir + 'points.png', dpi=300)
@@ -466,11 +495,12 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     Plot the data at the points of interest.
     """
     time_lag = runner.config['params']['time_lag']
+    frequency = runner.config.get('frequency', 100)
     size = 0.75
     fig, axs = plt.subplots(2, 2, figsize=(size*width, size*width/2), sharex=True, sharey=True)
     
-    t = idx / 100  # Convert to nondimensional time
-    t_true = np.array(true_idx) / 100
+    t = idx / frequency  # Convert to nondimensional time
+    t_true = np.array(true_idx) / frequency
 
     if len(eval_idx) == len(true_idx):
         eval_idx = range(len(true_idx))
@@ -499,8 +529,12 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     axs[1,0].set_ylabel('$u_{p2}$')
     axs[1,1].set_ylabel('$v_{p2}$')
     
-    axs[1,0].set_xlabel('Nondimensional time')
-    axs[1,1].set_xlabel('Nondimensional time')
+    if 'ldc' in runner.config['data_name']:
+        axs[1,0].set_xlabel('Nondimensional time')
+        axs[1,1].set_xlabel('Nondimensional time')
+    elif 'Challenge' in runner.config['data_name']:
+        axs[1,0].set_xlabel('Time (s)')
+        axs[1,1].set_xlabel('Time (s)')
 
     for ax in axs.flat:
         # ax.legend(
@@ -539,7 +573,7 @@ def plot_spectrograms(runner, data_dict, idx, true_idx):
     """
     from scipy.signal import spectrogram
     size = 0.75
-    fs = 100  # Sampling frequency
+    fs = runner.config.get('frequency', 100)
     time_lag = runner.config['params']['time_lag']
     fmt = lambda x, pos: r'$10^{{{}}}$'.format(int(np.log10(x))) if x != 0 else '0'
 
@@ -588,7 +622,10 @@ def plot_spectrograms(runner, data_dict, idx, true_idx):
             
 
         for ax in axs[-1, :]:
-            ax.set_xlabel('Nondimensional time')
+            if 'ldc' in runner.config['data_name']:
+                ax.set_xlabel('Nondimensional time')
+            elif 'Challenge' in runner.config['data_name']:
+                ax.set_xlabel('Time (s)')
         # plt.tight_layout()
         plt.savefig(os.path.join(runner.paths_bib.pred_fig_dir, f'spectrogram_{point}.png'), dpi=300)
         plt.close()
@@ -803,6 +840,7 @@ def animate(runner):
     time_lim = 100000
     run_lim = 60 # 60 second max animation length
     frame_rate = 30 # Frames per second
+    frequency = runner.config.get('frequency', 100)
     nx = runner.l_config.nx
     ny = runner.l_config.ny
     nx_t = runner.l_config.nx_t
@@ -887,7 +925,7 @@ def animate(runner):
                         spine.set_edgecolor('black')
                         spine.set_linewidth(1.5)
 
-                t = (np.arange(idx[0], idx[0] + num_snaps)-time_lag) / 100  
+                t = (np.arange(idx[0], idx[0] + num_snaps)-time_lag) / frequency  
                 t_true = t[:len(tke_true)]
                 # Bottom row: TKE plot spanning all columns
                 ax_tke = plt.subplot2grid((3, 3), (2, 0), colspan=3, fig=fig)
@@ -895,7 +933,10 @@ def animate(runner):
                 ax_tke.plot(t, tke_pred, label='Predicted TKE', color='r', linestyle='--')
                 ax_tke.axvline(id/100, color='b', linestyle=':', linewidth=2, label='Current Frame')
                 ax_tke.set_ylabel('TKE')
-                ax_tke.set_xlabel('Nondimensional time')
+                if 'ldc' in runner.config['data_name']:
+                    ax_tke.set_xlabel('Nondimensional time')
+                elif 'Challenge' in runner.config['data_name']:
+                    ax_tke.set_xlabel('Time (s)')
                 ax_tke.legend(
                     ['True', 'Predicted'],
                     loc='lower right',
