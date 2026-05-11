@@ -467,7 +467,7 @@ def plot_points(runner):
     
 
     fig_width, fig_height = size * width, size * width * domain_aspect_ratio
-    plt.figure(figsize=(fig_width, fig_height))
+    plt.figure(figsize=(fig_width, fig_height), constrained_layout=True)
     plt.contourf(X, Y, snapshot, cmap='RdBu_r', levels=200, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
