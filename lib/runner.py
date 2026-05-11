@@ -56,6 +56,7 @@ class runner(nn.Module):
 
     def _init_paths_and_logging(self, config):
         is_init_path, paths = init.init_path(config)
+        print(f"Follow runner logs using tail -f {paths.log_path}")
 
         if config['mode'] != 'compare':
             if config['log'] == 'file':
