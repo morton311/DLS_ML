@@ -41,6 +41,13 @@ def random_patch_sampling(data, patch_size):
 
 def Modal_decomp_2D(data, patch_size):
     P = random_patch_sampling(data, patch_size)
+    # check if matrix is wide or tall, if tall, use method of snapshots
+    # if P.shape[0] > P.shape[1]:
+    #     num_snaps = P.shape[1]
+    #     # method of snapshots
+    #     C = 1/num_snaps * P.T @ P
+    #     eig_vecs,sig_vals,right_eig_vecs = np.linalg.svd(C, full_matrices=False)
+    #     sig_vals = np.abs(np.diag(sig_vals))
     local_modes, eigVal, _ = np.linalg.svd(P, full_matrices=False)
     return local_modes, eigVal
 
@@ -464,6 +471,7 @@ class dls_long_Config:
         self.nx_g = len(self.sample_x)
         self.ny_g = len(self.sample_y)
         self.num_gfem_nodes = self.nx_g * self.ny_g
+        self.num_gfem_elems = (self.nx_g - 1) * (self.ny_g - 1)
         self.dof_node = num_modes + 1
         self.dof_elem = 4 * self.dof_node
         self.modemat_local_u = modemat_local_u
@@ -573,6 +581,9 @@ def latent_eval(runner):
             dof_v = f['dof_v'][:latent_length]
             print('dof_u shape:', dof_u.shape)
             print('dof_v shape:', dof_v.shape)
+            if not hasattr(runner.l_config, 'num_gfem_elems') or runner.l_config.num_gfem_elems is None:
+                runner.l_config.num_gfem_elems = (runner.l_config.nx_g - 1) * (runner.l_config.ny_g - 1)
+            print(f"num_gfem_elems: {runner.l_config.num_gfem_elems}, dof_node: {runner.l_config.dof_node}, dof_elem: {runner.l_config.dof_elem}")
             # reconstruct the data using the gfem_recon function
             print('Reconstructing data...')
             Q_rec = gfem_recon(dof_u=dof_u.T, dof_v=dof_v.T, config=runner.l_config)
@@ -602,6 +613,8 @@ def latent_eval(runner):
             os.makedirs(runner.paths_bib.fig_dir + 'latent_modes/', exist_ok=True)
             print('Saving POD modes...')
             save_modes = [0, 1, 2, 3, 4, 9, 19, 29, 39, 49, 99, 199]
+            # remove modes that are greater than the number of modes available
+            save_modes = [i for i in save_modes if i < runner.l_config.num_modes]
             for i in save_modes:
                 
                 pod_mode = modes[:, i].reshape((runner.l_config.nx_t, runner.l_config.ny_t, 2))
@@ -648,7 +661,7 @@ def latent_eval(runner):
 
             print('Loading BVAE model')
             data_shape = [runner.l_config.num_vars, runner.l_config.nx_t, runner.l_config.ny_t]
-            bvae = models.bvae_model(data_shape, runner.config)
+            bvae = bvae.bvae_model(data_shape, runner.config)
             bvae.load_state_dict(torch.load(runner.paths_bib.latent_model_path, weights_only=True))
             bvae.to(runner.device)
 
@@ -657,7 +670,7 @@ def latent_eval(runner):
             print('Calculating BVAE mode order and cumulative energy...')
 
             if latent_dim <= 10:
-                order, Ecum = models.bvae_mode_order(bvae, runner.paths_bib.data_path, runner.paths_bib.latent_path, runner.config, runner.device)
+                order, Ecum = bvae.bvae_mode_order(bvae, runner.paths_bib.data_path, runner.paths_bib.latent_path, runner.config, runner.device)
 
                 for i in range(len(Ecum)):
                     print(f'BVAE mode {i+1}, Cumulative Energy: {Ecum[i]:.4f}')
@@ -668,14 +681,14 @@ def latent_eval(runner):
             print('Reconstructing data...')
 
             dofs = torch.tensor(dofs, dtype=torch.float32).to(runner.device)
-            Q_rec = models.bvae_decode(bvae, dofs, runner.device)
+            Q_rec = bvae.bvae_decode(bvae, dofs, runner.device)
             Q_rec = Q_rec.cpu().detach().numpy().transpose(0,2,3,1)
             # rescale the data to the original mean and std
             scaler_path = runner.paths_bib.latent_dir + 'latent_scaler.pkl'
             if os.path.exists(scaler_path):
                 with open(scaler_path, 'rb') as f:
                     mean, std = pickle.load(f)
-                Q_rec = models.denormalize_data(Q_rec, mean, std)
+                Q_rec = bvae.denormalize_data(Q_rec, mean, std)
                 
                 
             print('Data shape:', Q_rec.shape)
@@ -689,7 +702,7 @@ def latent_eval(runner):
                 z = torch.zeros(latent_dim)
                 z[ind] = 1
                 z = z.to(runner.device)
-                bvae_mode = models.bvae_decode(bvae, z.unsqueeze(0), runner.device)
+                bvae_mode = bvae.bvae_decode(bvae, z.unsqueeze(0), runner.device)
                 bvae_mode = bvae_mode.cpu().detach().numpy().squeeze().transpose(1,2,0)
                 bvae_modes[i] = bvae_mode
                 # Make a figure of the mode and save to figs/latent_modes/

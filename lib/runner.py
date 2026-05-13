@@ -19,6 +19,7 @@ import lib.init as init
 import lib.dls as dls
 import lib.pod as pod
 import lib.models as models
+import lib.bvae as bvae
 import lib.datas as datas
 
 
@@ -150,121 +151,19 @@ class runner(nn.Module):
                 pickle.dump(latent_config, f)
 
         elif self.config['latent_type'] == 'bvae':
-            with h5py.File(self.paths_bib.data_path, 'r') as f:
-                data = f['UV'][0]
-                data_shape = data.transpose(2, 0, 1).shape
-            bvae = models.bvae_model(data_shape, self.config)
-            bvae.to(self.device)
-
-            if not os.path.exists(self.paths_bib.latent_model_path) and not self.config['overwrite'] in ['l', 'm']:
-
-                train_snaps = self.config['latent_params'].get('train_snaps', 2500)
-                train_split = self.config['latent_params'].get('train_test_split', 0.8)
-                test_split = self.config['latent_params'].get('train_val_split', 0.1)
-
-                
-                with h5py.File(self.paths_bib.data_path, 'r') as f:
-                    total_snaps = f['UV'].shape[0]
-                    if total_snaps < train_snaps:
-                        train_snaps = total_snaps
-
-                    train_len = int(train_snaps * train_split)
-                    test_len = int(train_len * test_split)
-
-                    train_indices = np.arange(0, train_len)
-                    test_indices = np.arange(train_len, train_len + test_len)
-                    val_indices = np.arange(train_len + test_len, total_snaps)
-
-                    mean = f['mean'][:]
-                    train_set = np.array(f['UV'][train_indices] - mean[np.newaxis, ...])
-                    test_set = np.array(f['UV'][test_indices] - mean[np.newaxis, ...])
-
-                    # compute mean and std of train set and save to latent_dir/latent_scaler.pkl
-                    train_mean = np.mean(train_set, axis=0)
-                    train_std = np.std(train_set, axis=0)
-                    with open(self.paths_bib.latent_dir + 'latent_scaler.pkl', 'wb') as f:
-                        pickle.dump((train_mean, train_std), f)
-
-                    train_set = datas.normalize_data(train_set, train_mean, train_std)
-                    test_set = datas.normalize_data(test_set, train_mean, train_std)
-
-                print(f"Train set shape: {train_set.shape}, Test set shape: {test_set.shape}")
-                print(f"Train set mean: {np.mean(train_set)}, Train set std: {np.std(train_set)}")
-                print(f"Train set min: {np.min(train_set)}, Train set max: {np.max(train_set)}")
-
-                train_set = train_set.transpose(0, 3, 1, 2)  # [S, C, H, W]
-                test_set = test_set.transpose(0, 3, 1, 2)    # [S, C, H, W]
-
-                # make train and test data loaders
-                train_loader = datas.make_dataloader(
-                    torch.from_numpy(train_set).float().to(self.device),
-                    torch.from_numpy(train_set).float().to(self.device),
-                    batch_size=self.config['latent_params'].get('batch_size', 256),
-                    shuffle=True
-                )
-
-                test_loader = datas.make_dataloader(
-                    torch.from_numpy(test_set).float().to(self.device),
-                    torch.from_numpy(test_set).float().to(self.device),
-                    batch_size=self.config['latent_params'].get('batch_size', 256),
-                    shuffle=False
-                )
-                
-
-                # create optimizer
-                optimizer = torch.optim.Adam(bvae.parameters(), lr=self.config['latent_params'].get('lr', 2e-4))
-                scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
-                                            max_lr=self.config['latent_params'].get('lr', 2e-4),
-                                            total_steps=self.config['latent_params'].get('num_epochs', 1000),
-                                            div_factor=2, 
-                                            final_div_factor=self.config['latent_params'].get('lr', 2e-4)
-                                                            /self.config['latent_params'].get('lr_end', 1e-5),
-                                            pct_start=0.2)
-                beta_scheduler = models.betaScheduler(self.config['latent_params']['beta'])
-
-                bvae, losses = models.train_bvae(
-                    model=bvae.to(self.device),
-                    train_loader=train_loader,
-                    test_loader=test_loader,
-                    optimizer=optimizer,
-                    config=self.config,
-                    scheduler=scheduler,
-                    beta_scheduler=beta_scheduler
-                )
-
-                # Save model and losses
-                torch.save(bvae.state_dict(), self.paths_bib.latent_model_path)
-                with open(self.paths_bib.latent_dir + 'bvae_losses.pkl', 'wb') as f:
-                    pickle.dump(losses, f)
-                
-                print(f"Latent model saved to {self.paths_bib.latent_model_path}")
-                print(f"Latent losses saved to {self.paths_bib.latent_dir + 'bvae_losses.pkl'}")
-
-            else:
-                print(f"Latent model already exists at {self.paths_bib.latent_model_path}. Loading model.")
-                
-                bvae.load_state_dict(torch.load(self.paths_bib.latent_model_path, weights_only=True, map_location=self.device))
-                bvae.to(self.device)
-
-
-            if os.path.exists(self.paths_bib.latent_path):
-                print(f"Latent coefficients already exist at {self.paths_bib.latent_path}. Skipping encoding.")
-            else:
-                # Encode the full dataset to get latent coefficients
-                models.bvae_batch_encode(
-                    model=bvae,
-                    data_path=self.paths_bib.data_path,
-                    latent_path=self.paths_bib.latent_path,
-                    config=self.config,
-                    device=self.device
-                )
+            bvae.compute_latent_coefficients(self)
 
 
     def _latent_split(self):
         with h5py.File(self.paths_bib.latent_path, 'r') as f:
             if self.config['latent_type'] == 'dls':
-                input_dim = 2 * f['dof_u'].shape[1]
-                total_snaps = f['dof_u'].shape[0]
+                if self.config['latent_params'].get('localized', False):
+                    with open(self.paths_bib.latent_path.replace('.h5', '_config.pkl'), 'rb') as cf:
+                        latent_config = pickle.load(cf)
+                        input_dim = self.latent_config['dof_elem'] 
+                else:
+                    input_dim = 2 * f['dof_u'].shape[1]
+                    total_snaps = f['dof_u'].shape[0]
             elif self.config['latent_type'] == 'pod':
                 total_snaps = f['dofs'].shape[0]
                 input_dim = self.config['latent_params']['num_modes'] 
@@ -338,7 +237,7 @@ class runner(nn.Module):
                         time_lag=self.config['params']['time_lag'],
                         input_dim=self.config['params']['input_dim'],
                         d_model=self.config['params']['d_model'],
-                        ff_dim=self.config['params'].get('ff_dim', 4 * self.config['params']['d_model']),
+                        ff_dim=self.config['params'].get('ff_dim', 2048),
                         nhead=self.config['params']['nhead'],
                         num_layers=self.config['params']['num_layers'],
                         embed=self.config['params'].get('embed', 'lin'),
@@ -463,70 +362,47 @@ class runner(nn.Module):
             tl = self.config['params']['time_lag']
             ta = self.config['train']['train_ahead']
             dof_dim = self.config['params']['input_dim']
+
+            self._get_train_mean_std()
+
             with h5py.File(self.paths_bib.latent_path, 'r') as f:
                 if self.config['latent_type'] == 'dls':
                     dof_u = f['dof_u']
                     dof_v = f['dof_v']
-                    # Compute mean and std using only the training indices, in chunks to save memory
-                    dofs = torch.zeros(len(self.train_indices), dof_dim)
-                    for i, idx in enumerate(self.train_indices):
-                        u = torch.from_numpy(dof_u[idx:idx+1]).float()
-                        v = torch.from_numpy(dof_v[idx:idx+1]).float()
-                        dofs[i] = torch.cat((u, v), dim=1)
-                elif self.config['latent_type'] == 'pod':
+                elif self.config['latent_type'] == 'pod' or self.config['latent_type'] == 'bvae':
                     dofs_not_scaled = f['dofs']
-                    dofs = torch.zeros(len(self.train_indices), dof_dim)
-                    for i, idx in enumerate(self.train_indices):
-                        dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+            
 
-                elif self.config['latent_type'] == 'bvae':
-                    dofs_not_scaled = f['dofs']
-                    dofs = torch.zeros(len(self.train_indices), dof_dim)
-                    for i, idx in enumerate(self.train_indices):
-                        dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+            # Helper to get normalized dof sequence as torch tensor
+            def get_dof_seq(idx, length, latent_type='dls'):
+                if latent_type == 'dls':
+                    u = torch.from_numpy(dof_u[idx:idx+length]).float()
+                    v = torch.from_numpy(dof_v[idx:idx+length]).float()
+                    dof = torch.cat((u, v), dim=1)
+                elif latent_type == 'pod' or latent_type == 'bvae':
+                    dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
 
-                dof_mean = torch.mean(dofs, dim=0)
-                dof_std = torch.std(dofs, dim=0)
+                dof = (dof - dof_mean) / dof_std
+                return dof
 
-                # print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
+            # Prepare lists for X/Y, then stack at the end
+            X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
+            for i, idx in enumerate(self.train_indices):
+                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
+                X_train[i] = dof_seq[:tl]
+                Y_train[i] = dof_seq[tl:tl+ta]
+                if i % 500 == 0:
+                    print(f"Got train data {i}/{len(self.train_indices)}")
+            print('Got train data')
 
-                self.dof_mean = dof_mean
-                self.dof_std = dof_std
-
-                with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
-                    pickle.dump((dof_mean, dof_std), f)
-
-                # Helper to get normalized dof sequence as torch tensor
-                def get_dof_seq(idx, length, latent_type='dls'):
-                    if latent_type == 'dls':
-                        u = torch.from_numpy(dof_u[idx:idx+length]).float()
-                        v = torch.from_numpy(dof_v[idx:idx+length]).float()
-                        dof = torch.cat((u, v), dim=1)
-                    elif latent_type == 'pod':
-                        dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
-                    elif latent_type == 'bvae':
-                        dof = torch.from_numpy(dofs_not_scaled[idx:idx+length, :dof_dim]).float()
-                    dof = (dof - dof_mean) / dof_std
-                    return dof
-
-                # Prepare lists for X/Y, then stack at the end
-                X_train, Y_train = torch.zeros(len(self.train_indices), tl, dof_dim), torch.zeros(len(self.train_indices), ta, dof_dim)
-                for i, idx in enumerate(self.train_indices):
-                    dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
-                    X_train[i] = dof_seq[:tl]
-                    Y_train[i] = dof_seq[tl:tl+ta]
-                    if i % 500 == 0:
-                        print(f"Got train data {i}/{len(self.train_indices)}")
-                print('Got train data')
-
-                X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
-                for i, idx in enumerate(self.test_indices):
-                    dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
-                    X_test[i] = dof_seq[:tl]
-                    Y_test[i] = dof_seq[tl:tl+ta]
-                    if i % 100 == 0:
-                        print(f"Got test data {i}/{len(self.test_indices)}")
-                print('Got test data')
+            X_test, Y_test = torch.zeros(len(self.test_indices), tl, dof_dim), torch.zeros(len(self.test_indices), ta, dof_dim)
+            for i, idx in enumerate(self.test_indices):
+                dof_seq = get_dof_seq(idx, tl + ta, latent_type=self.config['latent_type'])
+                X_test[i] = dof_seq[:tl]
+                Y_test[i] = dof_seq[tl:tl+ta]
+                if i % 100 == 0:
+                    print(f"Got test data {i}/{len(self.test_indices)}")
+            print('Got test data')
 
 
             print(f"X_train shape: {X_train.shape}, Y_train shape: {Y_train.shape}, dtype: {X_train.dtype}")
@@ -567,7 +443,41 @@ class runner(nn.Module):
                     self.train_loader = (X_train - dof_mean) / dof_std
                     self.test_loader = (X_test - dof_mean) / dof_std
 
+    def _get_train_mean_std(self):
+        tl = self.config['params']['time_lag']
+        ta = self.config['train']['train_ahead']
+        dof_dim = self.config['params']['input_dim']
+        with h5py.File(self.paths_bib.latent_path, 'r') as f:
+            if self.config['latent_type'] == 'dls':
+                dof_u = f['dof_u']
+                dof_v = f['dof_v']
+                # Compute mean and std using only the training indices, in chunks to save memory
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    u = torch.from_numpy(dof_u[idx:idx+1]).float()
+                    v = torch.from_numpy(dof_v[idx:idx+1]).float()
+                    dofs[i] = torch.cat((u, v), dim=1)
+            elif self.config['latent_type'] == 'pod':
+                dofs_not_scaled = f['dofs']
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
 
+            elif self.config['latent_type'] == 'bvae':
+                dofs_not_scaled = f['dofs']
+                dofs = torch.zeros(len(self.train_indices), dof_dim)
+                for i, idx in enumerate(self.train_indices):
+                    dofs[i] = torch.from_numpy(dofs_not_scaled[idx:idx+1, :dof_dim]).float()
+
+            dof_mean = torch.mean(dofs, dim=0)
+            dof_std = torch.std(dofs, dim=0)
+
+            # print(f"Mean of dof: {dof_mean}, Std of dof: {dof_std}")
+
+            self.dof_mean = dof_mean
+            self.dof_std = dof_std
+            with open(os.path.join(self.paths_bib.model_dir, 'dof_scaler.pkl'), 'wb') as f:
+                pickle.dump((dof_mean, dof_std), f)
 
 
     def _model_fit(self):
@@ -977,7 +887,7 @@ class runner(nn.Module):
             y_closest = np.argmin(np.abs(y))
 
             x_closest1 = np.argmin(np.abs(x - 2))
-            x_closest2 = np.argmin(np.abs(x - 5.5))
+            x_closest2 = np.argmin(np.abs(x - 5))
 
         point_1 = (x[x_closest1], y[y_closest])
         point_2 = (x[x_closest2], y[y_closest])

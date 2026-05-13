@@ -244,18 +244,24 @@ def plot_PSDs(runner, data_dict):
     size = 0.75
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
     # Plotting the PSD for U and V component point 1
-    axs[0].loglog(psd_results['f'], psd_results['truth']['p1'][0], label='True $u$', color='k', linestyle='-')
-    axs[1].loglog(psd_results['f'], psd_results['truth']['p1'][1], label='True $v$', color='k', linestyle='-')
-    axs[0].loglog(psd_results['f'], psd_results['pred']['p1'][0], label='Predicted $u$', color='r', linestyle='-.')
-    axs[1].loglog(psd_results['f'], psd_results['pred']['p1'][1], label='Predicted $v$', color='r', linestyle='-.')
-    axs[0].set_ylabel('PSD($u_{p1}$)')
-    axs[1].set_ylabel('PSD($v_{p1}$)')
+    axs[0].plot(psd_results['f'], psd_results['truth']['p1'][0], label='True $u$', color='k', linestyle='-')
+    axs[1].plot(psd_results['f'], psd_results['truth']['p1'][1], label='True $v$', color='k', linestyle='-')
+    axs[0].plot(psd_results['f'], psd_results['pred']['p1'][0], label='Predicted $u$', color='r', linestyle='-.')
+    axs[1].plot(psd_results['f'], psd_results['pred']['p1'][1], label='Predicted $v$', color='r', linestyle='-.')
     if 'ldc' in runner.config['data_name']:
+        axs[0].set_xscale('log'); axs[1].set_xscale('log')
+        axs[0].set_yscale('log'); axs[1].set_yscale('log')
         axs[0].set_xlabel('Nondimensional frequency')
         axs[1].set_xlabel('Nondimensional frequency')
+    
+    
     elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_yscale('log'); axs[1].set_yscale('log')
         axs[0].set_xlabel('Frequency (Hz)')
         axs[1].set_xlabel('Frequency (Hz)')
+    
+    axs[0].set_ylabel('PSD($u_{p1}$)')
+    axs[1].set_ylabel('PSD($v_{p1}$)')
     # axs[0].legend()
     # axs[1].legend()
     axs[0].grid(visible=True, linestyle='--', linewidth=0.5)
@@ -276,16 +282,19 @@ def plot_PSDs(runner, data_dict):
 
     # Plotting the PSD for U and V component point 2
     fig, axs = plt.subplots(1, 2, figsize=(size*width, size*width/3))
-    axs[0].loglog(psd_results['f'], psd_results['truth']['p2'][0], label='True $u$', color='k', linestyle='-')
-    axs[1].loglog(psd_results['f'], psd_results['truth']['p2'][1], label='True $v$', color='k', linestyle='-')
-    axs[0].loglog(psd_results['f'], psd_results['pred']['p2'][0], label='Predicted $u$', color='r', linestyle='-.')
-    axs[1].loglog(psd_results['f'], psd_results['pred']['p2'][1], label='Predicted $v$', color='r', linestyle='-.')
+    axs[0].plot(psd_results['f'], psd_results['truth']['p2'][0], label='True $u$', color='k', linestyle='-')
+    axs[1].plot(psd_results['f'], psd_results['truth']['p2'][1], label='True $v$', color='k', linestyle='-')
+    axs[0].plot(psd_results['f'], psd_results['pred']['p2'][0], label='Predicted $u$', color='r', linestyle='-.')
+    axs[1].plot(psd_results['f'], psd_results['pred']['p2'][1], label='Predicted $v$', color='r', linestyle='-.')
     axs[0].set_ylabel('PSD($u_{p2}$)')
     axs[1].set_ylabel('PSD($v_{p2}$)')
     if 'ldc' in runner.config['data_name']:
+        axs[0].set_xscale('log'); axs[1].set_xscale('log')
+        axs[0].set_yscale('log'); axs[1].set_yscale('log')
         axs[0].set_xlabel('Nondimensional frequency')
         axs[1].set_xlabel('Nondimensional frequency')
     elif 'Challenge' in runner.config['data_name']:
+        axs[0].set_yscale('log'); axs[1].set_yscale('log')
         axs[0].set_xlabel('Frequency (Hz)')
         axs[1].set_xlabel('Frequency (Hz)')
     axs[1].legend(
@@ -443,7 +452,7 @@ def plot_points(runner):
         y_closest = np.argmin(np.abs(y))
 
         x_closest1 = np.argmin(np.abs(x - 2))
-        x_closest2 = np.argmin(np.abs(x - 5.5))
+        x_closest2 = np.argmin(np.abs(x - 5))
 
     point_1 = (x[x_closest1], y[y_closest])
     point_2 = (x[x_closest2], y[y_closest])
@@ -471,10 +480,13 @@ def plot_points(runner):
     plt.contourf(X, Y, snapshot, cmap='RdBu_r', levels=200, vmin=-vmax, vmax=vmax)
     plt.scatter(point_1[0], point_1[1], color='k', label='Point 1', s=40)
     plt.scatter(point_2[0], point_2[1], color='k', label='Point 2', s=40)
-    
-    plt.text(float(np.asarray(point_1[0]).reshape(())), float(np.asarray(point_1[1] - 0.1 * domain_height).reshape(())), f'Point 1', 
+
+    x1, y1 = point_1[0], point_1[1] - 0.1 * domain_height
+    x2, y2 = point_2[0], point_2[1] - 0.1 * domain_height
+
+    plt.text(x1.squeeze(), y1.squeeze(), f'Point 1', 
         color='k', fontsize=12, va='top', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
-    plt.text(float(np.asarray(point_2[0]).reshape(())), float(np.asarray(point_2[1] - 0.1 * domain_height).reshape(())), f'Point 2', 
+    plt.text(x2.squeeze(), y2.squeeze(), f'Point 2', 
         color='k', fontsize=12, va='top', ha='center', bbox=dict(facecolor='lightblue', alpha=0.8))
     # plt.xlabel('X')
     # plt.ylabel('Y')
@@ -508,9 +520,9 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
 
     # Plotting the data for Point 1
     axs[0,0].plot(t_true, data_dict['truth']['p1'][:,0], label='True', color='k', linestyle='-')
-    axs[0,0].plot(t, data_dict['pred']['p1'][:,0], label='Predicted', color='r', linestyle='-.')
+    axs[0,0].plot(t[time_lag-1:], data_dict['pred']['p1'][time_lag-1:,0], label='Predicted', color='r', linestyle='-.')
     axs[0,1].plot(t_true, data_dict['truth']['p1'][:,1], label='True', color='k', linestyle='-')
-    axs[0,1].plot(t, data_dict['pred']['p1'][:,1], label='Predicted', color='r', linestyle='-.')
+    axs[0,1].plot(t[time_lag-1:], data_dict['pred']['p1'][time_lag-1:,1], label='Predicted', color='r', linestyle='-.')
     
     # axs[0,0].set_title('Point 1 $u$-component')
     # axs[0,1].set_title('Point 1 $v$-component')
@@ -520,9 +532,9 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
     
     # Plotting the data for Point 2
     axs[1,0].plot(t_true, data_dict['truth']['p2'][:,0], label='True', color='k', linestyle='-')
-    axs[1,0].plot(t, data_dict['pred']['p2'][:,0], label='Predicted', color='r', linestyle='-.')
+    axs[1,0].plot(t[time_lag-1:], data_dict['pred']['p2'][time_lag-1:,0], label='Predicted', color='r', linestyle='-.')
     axs[1,1].plot(t_true, data_dict['truth']['p2'][:,1], label='True', color='k', linestyle='-')
-    axs[1,1].plot(t, data_dict['pred']['p2'][:,1], label='Predicted', color='r', linestyle='-.')
+    axs[1,1].plot(t[time_lag-1:], data_dict['pred']['p2'][time_lag-1:,1], label='Predicted', color='r', linestyle='-.')
     
     # axs[1,0].set_title('Point 2 $u$-component')
     # axs[1,1].set_title('Point 2 $v$-component')
@@ -554,6 +566,7 @@ def plot_point_data(runner, data_dict, idx, eval_idx, true_idx):
         frameon=False,  # Removes legend border,
         fontsize=8  # Adjust font size
     )
+    
     fig.suptitle('Velocity Data at Points of Interest')
     # fig.tight_layout(rect=[0, 0, 1, 1.1])  # Adjust layout to make room for suptitle
 
